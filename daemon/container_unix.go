@@ -813,6 +813,19 @@ func (container *Container) updateNetwork() error {
 	return nil
 }
 
+func parseIpOrNet(ipStr string) *net.IPNet {
+	if parsedIp := net.ParseIP(ipStr); parsedIp != nil {
+		return &net.IPNet{IP: parsedIp, Mask: net.IPv4Mask(255, 255, 255, 255)}
+	} else {
+		_, ipNet, err := net.ParseCIDR(ipStr)
+		if err == nil {
+			return ipNet
+		}
+	}
+
+	return nil
+}
+
 func (container *Container) buildCreateEndpointOptions(n libnetwork.Network) ([]libnetwork.EndpointOption, error) {
 	var (
 		portSpecs     = make(nat.PortSet)
@@ -836,7 +849,8 @@ func (container *Container) buildCreateEndpointOptions(n libnetwork.Network) ([]
 		for _, ipAddress := range strings.Split(ipAddresses, ",") {
 			parsedIp := net.ParseIP(ipAddress)
 			if parsedIp == nil {
-				
+
+				// TODO shouldn't we return an error if net mask != /32? We could reuse parseIpOrNet
 				parsedCidr, _, err := net.ParseCIDR(ipAddress)
 				if err != nil {
 					parsedIp = nil
@@ -856,8 +870,22 @@ func (container *Container) buildCreateEndpointOptions(n libnetwork.Network) ([]
 			return nil, fmt.Errorf("No valid IPv4 addresses found in label %s", netlabel.IPv4Addresses)
 		}
 
+		var allowedNets []*net.IPNet
+		ingressAllowedString := container.Config.Labels[netlabel.IngressAllowed]
+		if ingressAllowedString != "" {
+			for _, filterElement := range strings.Split(ingressAllowedString, ",") {
+				ipNet := parseIpOrNet(filterElement)
+				if ipNet == nil {
+					return nil, fmt.Errorf("NetFilter: Could not parse IP or CIDR %s", filterElement)
+				}
+				// TODO support IP range (IP-IP)
+				allowedNets = append(allowedNets, ipNet)
+			}
+		}
+
 		addrOption := options.Generic{
 			netlabel.IPv4Addresses: ip4Addr,
+			netlabel.IngressAllowed: allowedNets,
 		}
 		createOptions = append(createOptions, libnetwork.EndpointOptionGeneric(addrOption))
 	}
