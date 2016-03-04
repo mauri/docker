@@ -26,11 +26,9 @@ func ParseIPRange(ipRange string) *IPRange {
 	if len(ipStrs) == 2 {
 		var ips [2]net.IP
 		for idx, ipStr := range ipStrs {
-			ips[idx] = net.ParseIP(ipStr)
+			ips[idx] = net.ParseIP(strings.TrimSpace(ipStr))
 		}
 		if ips[0] != nil && ips[1] != nil {
-			// TODO verify first < last
-			// TODO support partial ips?
 			return &IPRange{from: ips[0], to: ips[1]}
 		}
 	}
@@ -88,7 +86,6 @@ func NewNetFilter(ifaceName string, epOptions map[string]interface{}) *netFilter
 
 	ingressFiltering := epOptions[netlabel.IngressAllowed].(*netFilterConfig)
 	if ingressFiltering == nil {
-		// TODO we might want to throw an exception in the future (make filtering mandatory)
 		logrus.Info("No network ingress filtering specified")
 	}
 
