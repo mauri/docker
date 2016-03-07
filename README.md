@@ -26,6 +26,73 @@ Security is very important to us. If you have any issue regarding security,
 please disclose the information responsibly by sending an email to 
 security@docker.com and not by creating a github issue.
 
+## Medallia Updates
+
+Features added on top of stock docker:
+
+### Routed network driver
+
+### Auto volume mount (NFS/Ceph)
+
+### IP tables integration
+
+Works with the routed driver. Allows to specify what IPs are allowed to connect
+to the container.
+
+You specify it via the container label "io.docker.network.endpoint.ingressAllowed".
+For example:
+
+```bash
+docker run -it --net=routed --ip-address=192.168.13.13 --label io.docker.network.endpoint.ingressAllowed="1.1.1.1/24,2.2.2.2" ubuntu /bin/bash
+```
+
+The parameter accepts a comma separated list of values, which can be:
+
+  * Single IP
+  * IP Net (CIDR)
+  * IP Range (IP-IP)
+
+The host machine is expected to have the following IP Chains for this feature to work.
+(DCIB adds them in DCs)
+
+  * CONTAINERS: Where references to container specific chains are added.
+  This is supposed to be referenced from the FORWARD chain.
+  * CONTAINER-REJECT: What the container specific chain jumps to in case of rejection.
+
+For local development, you can execute these commands:
+
+```bash
+sudo iptables -N CONTAINERS
+sudo iptables -A CONTAINERS -j RETURN
+
+sudo iptables -N CONTAINER-REJECT
+sudo iptables -A CONTAINER-REJECT -p tcp -j REJECT --reject-with tcp-reset
+sudo iptables -A CONTAINER-REJECT -j REJECT
+
+sudo iptables -I FORWARD 1 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+sudo iptables -I FORWARD 2 -p icmp -j ACCEPT
+sudo iptables -I FORWARD 3 -m state --state INVALID -j DROP
+sudo iptables -I FORWARD 4 -j CONTAINERS
+```
+
+If the label is not specified, there is no ingress restriction enforced.
+
+### LibNetwork updates
+
+Instead of working directly in the vendor folder for libnetwork updates, you should clone the
+medallia libnetwork fork, work on the updates and then update the docker repo with
+those changes (vendoring), running the hack/vendor-libnetwork-medallia.sh script
+(after you updated it with the correct changeset hash).
+
+To run unit tests on libnetwork repo:
+
+```bash
+make build
+docker run --privileged --rm -ti -w /go/src/github.com/docker/libnetwork -v `pwd`:/go/src/github.com/docker/libnetwork libnetworkbuild:latest /bin/bash
+INSIDECONTAINER=-incontainer=true godep go test -test.parallel 3 -test.v -run TestParseIPRange
+```
+
+
 ## Better than VMs
 
 A common method for distributing applications and sandboxing their
