@@ -37,6 +37,7 @@ import (
 	"github.com/opencontainers/runc/libcontainer/configs"
 	"github.com/opencontainers/runc/libcontainer/devices"
 	"github.com/opencontainers/runc/libcontainer/label"
+	"github.com/docker/libnetwork/drivers/routed"
 )
 
 // DefaultPathEnv is unix style list of directories to search for
@@ -834,30 +835,32 @@ func (container *Container) buildCreateEndpointOptions(n libnetwork.Network) ([]
 		}
 
 		for _, ipAddress := range strings.Split(ipAddresses, ",") {
-			parsedIp := net.ParseIP(ipAddress)
-			if parsedIp == nil {
-				
-				parsedCidr, _, err := net.ParseCIDR(ipAddress)
-				if err != nil {
-					parsedIp = nil
-				} else {
-					parsedIp = parsedCidr
-				}
-			}
-			ip := parsedIp 
-			if ip == nil {
+			ipAddress = strings.TrimSpace(ipAddress)
+
+			parsedNet := routed.ParseIpOrNet(ipAddress)
+			if parsedNet == nil {
 				return nil, fmt.Errorf("%s is not a valid IPv4 Address", ipAddress)
-			}	
-			logrus.Debugf("IP Address: %s", ipAddress)
-			ip4Addr = append(ip4Addr, net.IPNet{IP: ip, Mask: net.IPv4Mask(255, 255, 255, 255)})
+			}
+			if ones, _ := parsedNet.Mask.Size(); ones != 32 {
+				return nil, fmt.Errorf("%s CIDR should have a /32 mask", ipAddress)
+			}
+
+			logrus.Debugf("IP Address: %s", parsedNet.IP)
+			ip4Addr = append(ip4Addr, *parsedNet)
 		}
 		
 		if len(ip4Addr) == 0 {
 			return nil, fmt.Errorf("No valid IPv4 addresses found in label %s", netlabel.IPv4Addresses)
 		}
 
+		netFilterConfig, err := routed.NetFilterConfigParse(container.Config.Labels[netlabel.IngressAllowed])
+		if err != nil {
+			return nil, fmt.Errorf("No valid value for label %s, %v", netlabel.IngressAllowed, err)
+		}
+
 		addrOption := options.Generic{
 			netlabel.IPv4Addresses: ip4Addr,
+			netlabel.IngressAllowed: netFilterConfig,
 		}
 		createOptions = append(createOptions, libnetwork.EndpointOptionGeneric(addrOption))
 	}
