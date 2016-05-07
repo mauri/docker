@@ -304,7 +304,7 @@ func (d *Driver) setupMounts(container *configs.Config, c *execdriver.Command) e
 			flags |= syscall.MS_SLAVE
 		}
 		device := "bind"
-		if m.Driver == "ceph" || m.Driver == "nfs" {
+		if m.Driver == "ceph" {
 			device = m.Driver
 		} else {
 			flags |= syscall.MS_BIND | syscall.MS_REC
