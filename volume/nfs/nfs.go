@@ -98,10 +98,8 @@ func (v *Volume) Mount() (string, error) {
 		return "", err
 	}
 	v.hostFolder = name
-	// retry=0,timeo=30: Fail if NFS server can't be reached in three second (no retries) - aggressive, but necessary because the Docker daemon becomes unresponsive if the mount command hangs.
-	// nolock:           Don't use NFS locking, because the host's rpc.statd can't be reached at this point since we're already inside the network namespace.
-	//                   This won't let us use fcntl, but that's on par with today's system, since our current NFS server doesn't support locking.
-	args := []string{"-o", "retry=0,timeo=30,nolock"}
+	// retry=0,timeo=30: Fail if NFS server can't be reached in 30 second (no retries) - aggressive, but necessary because the Docker daemon becomes unresponsive if the mount command hangs.
+	args := []string{"-o", "retry=0,timeo=30"}
 
 	if err = libcontainer.DoMountCmd(v.DriverName(), v.Name(), v.hostFolder, args); err != nil {
 		return "", err
