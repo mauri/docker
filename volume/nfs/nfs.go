@@ -1,7 +1,9 @@
 package nfsvolumedriver
 
 import (
+	"errors"
 	"fmt"
+	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/volume"
 	"github.com/opencontainers/runc/libcontainer"
 	"io/ioutil"
@@ -56,6 +58,10 @@ func (r *Root) Remove(v volume.Volume) error {
 }
 
 type Volume struct {
+	m sync.Mutex
+
+	// Amount of container mounts using this volume
+	usedCount int
 	// unique name of the volume
 	name string
 	// driverName is the name of the driver that created the volume.
@@ -73,11 +79,20 @@ func (v *Volume) DriverName() string {
 }
 
 func (v *Volume) Path() string {
+	v.m.Lock()
+	defer v.m.Unlock()
 	return v.hostFolder
 }
 
 func (v *Volume) Mount() (string, error) {
-	// The return value from this method will be passed to the container
+	v.m.Lock()
+	defer v.m.Unlock()
+
+	v.usedCount++
+	if v.usedCount > 1 {
+		// Already mounted
+		return v.hostFolder, nil
+	}
 	name, err := ioutil.TempDir(NFS_MOUNTS_FOLDER, "")
 	if err != nil {
 		return "", err
@@ -88,16 +103,46 @@ func (v *Volume) Mount() (string, error) {
 	//                   This won't let us use fcntl, but that's on par with today's system, since our current NFS server doesn't support locking.
 	args := []string{"-o", "retry=0,timeo=30,nolock"}
 
-	if err = libcontainer.DoMountCmd(v.DriverName(), v.Name(), v.Path(), args); err != nil {
+	if err = libcontainer.DoMountCmd(v.DriverName(), v.Name(), v.hostFolder, args); err != nil {
 		return "", err
 	}
 	return v.hostFolder, nil
 }
 
 func (v *Volume) Unmount() error {
-	err := exec.Command("umount", v.Path()).Run()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to unmount nfs device %s to %s\n", v.Name(), v.Path())
+	v.m.Lock()
+	defer v.m.Unlock()
+
+	if err := v.release(); err != nil {
+		return err
 	}
+
+	// Don't unmount if still being used
+	if v.usedCount > 0 {
+		return nil
+	}
+
+	err := exec.Command("umount", v.hostFolder).Run()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to unmount nfs device %s to %s\n", v.Name(), v.hostFolder)
+		return err
+	}
+
+	err = os.Remove(v.hostFolder)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to remove folder %s\n", v.hostFolder)
+	}
+	v.hostFolder = ""
 	return err
+}
+
+func (v *Volume) release() error {
+	// Note that the call to release() is assumed to be contained in a v.m.Lock()/Unlock() (the mutex isn't reentrant, so we can't lock it again here)
+	if v.usedCount == 0 { // Shouldn't happen as long as Docker calls Mount()/Unmount() the way we think, but we've misunderstood the call sequence before
+		msg := fmt.Sprintf("Bug: The Nfs volume '%s' is being released more times than it has been used", v.Name())
+		logrus.Errorf(msg)
+		return errors.New(msg)
+	}
+	v.usedCount--
+	return nil
 }
