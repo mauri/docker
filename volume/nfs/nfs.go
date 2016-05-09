@@ -88,6 +88,9 @@ func (v *Volume) Mount() (string, error) {
 	v.m.Lock()
 	defer v.m.Unlock()
 
+	// Even if Mount() fails, Unmount will be called.
+	// So we increment usedCount ASAP to maintain the value
+	// in a coherent way
 	v.usedCount++
 	if v.usedCount > 1 {
 		// Already mounted
@@ -122,7 +125,7 @@ func (v *Volume) Unmount() error {
 
 	err := exec.Command("umount", v.hostFolder).Run()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to unmount nfs device %s to %s\n", v.Name(), v.hostFolder)
+		fmt.Fprintf(os.Stderr, "Failed to unmount nfs device %s from %s\n", v.Name(), v.hostFolder)
 		return err
 	}
 
@@ -137,7 +140,7 @@ func (v *Volume) Unmount() error {
 func (v *Volume) release() error {
 	// Note that the call to release() is assumed to be contained in a v.m.Lock()/Unlock() (the mutex isn't reentrant, so we can't lock it again here)
 	if v.usedCount == 0 { // Shouldn't happen as long as Docker calls Mount()/Unmount() the way we think, but we've misunderstood the call sequence before
-		msg := fmt.Sprintf("Bug: The Nfs volume '%s' is being released more times than it has been used", v.Name())
+		msg := fmt.Sprintf("Bug: The nfs volume '%s' is being released more times than it has been used", v.Name())
 		logrus.Errorf(msg)
 		return errors.New(msg)
 	}
