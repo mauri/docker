@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	NFS_MOUNTS_FOLDER             = "/var/lib/docker/nfs_mounts"
-	NFS_MOUNTS_FOLDER_PERMISSIONS = 0755
+	NFS_MOUNTS_DIRECTORY             = "/var/lib/docker/nfs_mounts"
+	NFS_MOUNTS_DIRECTORY_PERMISSIONS = 0755
 )
 
 func New() *Root {
@@ -29,23 +29,23 @@ func (r *Root) Name() string {
 	return "nfs"
 }
 
-// Makes sure that the nfs mounts folder exists
-func ensureNfsFolderExists() error {
-	_, err := os.Stat(NFS_MOUNTS_FOLDER)
+// Makes sure that the nfs mounts directory exists
+func ensureNfsDirectoryExists() error {
+	_, err := os.Stat(NFS_MOUNTS_DIRECTORY)
 	if err == nil {
 		return nil
 	}
 	if !os.IsNotExist(err) {
 		return err
 	}
-	return os.MkdirAll(NFS_MOUNTS_FOLDER, NFS_MOUNTS_FOLDER_PERMISSIONS)
+	return os.MkdirAll(NFS_MOUNTS_DIRECTORY, NFS_MOUNTS_DIRECTORY_PERMISSIONS)
 }
 
 func (r *Root) Create(name string, _ map[string]string) (volume.Volume, error) {
 	r.m.Lock()
 	defer r.m.Unlock()
 
-	ensureNfsFolderExists()
+	ensureNfsDirectoryExists()
 	return &Volume{
 		driverName: r.Name(),
 		name:       name,
@@ -66,8 +66,8 @@ type Volume struct {
 	name string
 	// driverName is the name of the driver that created the volume.
 	driverName string
-	// The host folder where the nfs was mounted to
-	hostFolder string
+	// The host directory where the nfs was mounted to
+	hostDirectory string
 }
 
 func (v *Volume) Name() string {
@@ -81,7 +81,7 @@ func (v *Volume) DriverName() string {
 func (v *Volume) Path() string {
 	v.m.Lock()
 	defer v.m.Unlock()
-	return v.hostFolder
+	return v.hostDirectory
 }
 
 func (v *Volume) Mount() (string, error) {
@@ -94,20 +94,20 @@ func (v *Volume) Mount() (string, error) {
 	v.usedCount++
 	if v.usedCount > 1 {
 		// Already mounted
-		return v.hostFolder, nil
+		return v.hostDirectory, nil
 	}
-	name, err := ioutil.TempDir(NFS_MOUNTS_FOLDER, "")
+	name, err := ioutil.TempDir(NFS_MOUNTS_DIRECTORY, "")
 	if err != nil {
 		return "", err
 	}
-	v.hostFolder = name
+	v.hostDirectory = name
 	// retry=0,timeo=30: Fail if NFS server can't be reached in 30 second (no retries) - aggressive, but necessary because the Docker daemon becomes unresponsive if the mount command hangs.
 	args := []string{"-o", "retry=0,timeo=30"}
 
-	if err = libcontainer.DoMountCmd(v.DriverName(), v.Name(), v.hostFolder, args); err != nil {
+	if err = libcontainer.DoMountCmd(v.DriverName(), v.Name(), v.hostDirectory, args); err != nil {
 		return "", err
 	}
-	return v.hostFolder, nil
+	return v.hostDirectory, nil
 }
 
 func (v *Volume) Unmount() error {
@@ -123,17 +123,17 @@ func (v *Volume) Unmount() error {
 		return nil
 	}
 
-	err := exec.Command("umount", v.hostFolder).Run()
+	err := exec.Command("umount", v.hostDirectory).Run()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to unmount nfs device %s from %s\n", v.Name(), v.hostFolder)
+		fmt.Fprintf(os.Stderr, "Failed to unmount nfs device %s from %s\n", v.Name(), v.hostDirectory)
 		return err
 	}
 
-	err = os.Remove(v.hostFolder)
+	err = os.Remove(v.hostDirectory)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to remove folder %s\n", v.hostFolder)
+		fmt.Fprintf(os.Stderr, "Failed to remove directory %s\n", v.hostDirectory)
 	}
-	v.hostFolder = ""
+	v.hostDirectory = ""
 	return err
 }
 
