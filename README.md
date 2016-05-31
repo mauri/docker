@@ -1,30 +1,4 @@
-Docker: the container engine [![Release](https://img.shields.io/github/release/docker/docker.svg)](https://github.com/docker/docker/releases/latest)
-============================
-
-Docker is an open source project to pack, ship and run any application
-as a lightweight container.
-
-Docker containers are both *hardware-agnostic* and *platform-agnostic*.
-This means they can run anywhere, from your laptop to the largest
-cloud compute instance and everything in between - and they don't require
-you to use a particular language, framework or packaging system. That
-makes them great building blocks for deploying and scaling web apps,
-databases, and backend services without depending on a particular stack
-or provider.
-
-Docker began as an open-source implementation of the deployment engine which
-powers [dotCloud](https://www.dotcloud.com), a popular Platform-as-a-Service.
-It benefits directly from the experience accumulated over several years
-of large-scale operation and support of hundreds of thousands of
-applications and databases.
-
 ![Docker L](docs/static_files/docker-logo-compressed.png "Docker")
-
-## Security Disclosure
-
-Security is very important to us. If you have any issue regarding security, 
-please disclose the information responsibly by sending an email to 
-security@docker.com and not by creating a github issue.
 
 ## Medallia Updates
 
@@ -32,7 +6,53 @@ Features added on top of stock docker:
 
 ### Routed network driver
 
-### Auto volume mount (NFS/Ceph)
+Provides a transparent way to assign multiple IP addresses to a container. It's based on using standard routing 
+protocols to share the information of where each container is running across a cluster. Thus not needing to have 
+a distributed storage and separate processes as the source of truth. Currently using the [Quagga](http://www.nongnu.org/quagga) OSPF implementation.
+
+The regular veth pair creation is then replaced for the following sequence of events.
+
+- Creates a pair of veth.
+- Moves one to the container namespace.
+- Renames the container veth to eth0.
+- Adds route to 0.0.0.0/0 via eth0 in container.
+- Sets the requested IP addresses to the container eth0. 
+- Adds route to container IP via veth0 in the host.
+
+Then the route to reach the container addresses is automatically propagated by the enabled routing protocol. In essence, each host in the cluster acts as a router.
+
+The configuration is quite simple, for example the following ospfd.conf file of Quagga allows to route the containers in the networks 10.112.0.0, 192.168.0.0 and 10.255.255.0 using the host eth1 interface. Any container with IP addresses in those networks, regardless the host where they are running, will be able to talk to each other.
+
+```
+! Bootstrap Config
+router ospf
+ ospf router-id 10.112.11.6
+ redistribute kernel
+ passive-interface default
+ no passive-interface eth1
+ network 10.112.0.0/12 area 0.0.0.0
+ network 192.168.0.0/16 area 0.0.0.0
+ network 10.255.255.0/24 area 0.0.0.0
+!
+log syslog
+!
+interface eth1
+!ip ospf network point-to-point
+!
+```
+
+To launch a container using the routed mode, you need to specify it and add a label containing the list of IP addresses you want to assign to a particular container. 
+
+
+```bash
+docker run --it --net=routed --label io.docker.network.endpoint.ip4addresses="192.168.13.1,10.112.20.2" ubuntu
+```
+
+Also an 'ip-address' option is available to supply the addresses
+```bash
+docker run --it --net=routed --ip-address="192.168.13.1,10.112.20.2" ubuntu
+```
+
 
 ### IP tables integration
 
@@ -91,7 +111,43 @@ make build
 docker run --privileged --rm -ti -w /go/src/github.com/docker/libnetwork -v `pwd`:/go/src/github.com/docker/libnetwork libnetworkbuild:latest /bin/bash
 INSIDECONTAINER=-incontainer=true godep go test -test.parallel 3 -test.v -run TestParseIPRange
 ```
+### Auto volume mount (NFS/Ceph)
 
+```bash
+docker run -v 10.112.12.13//foo:/foo:nfs,rw ubuntu 
+```
+
+```bash
+docker run -v ceph-volume-foo:/foo:ceph,rw ubuntu
+```
+
+
+Docker: the container engine [![Release](https://img.shields.io/github/release/docker/docker.svg)](https://github.com/docker/docker/releases/latest)
+============================
+
+Docker is an open source project to pack, ship and run any application
+as a lightweight container.
+
+Docker containers are both *hardware-agnostic* and *platform-agnostic*.
+This means they can run anywhere, from your laptop to the largest
+cloud compute instance and everything in between - and they don't require
+you to use a particular language, framework or packaging system. That
+makes them great building blocks for deploying and scaling web apps,
+databases, and backend services without depending on a particular stack
+or provider.
+
+Docker began as an open-source implementation of the deployment engine which
+powers [dotCloud](https://www.dotcloud.com), a popular Platform-as-a-Service.
+It benefits directly from the experience accumulated over several years
+of large-scale operation and support of hundreds of thousands of
+applications and databases.
+
+
+## Security Disclosure
+
+Security is very important to us. If you have any issue regarding security, 
+please disclose the information responsibly by sending an email to 
+security@docker.com and not by creating a github issue.
 
 ## Better than VMs
 
