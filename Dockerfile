@@ -128,6 +128,7 @@ RUN git clone https://github.com/golang/lint.git /go/src/github.com/golang/lint 
 	&& go install -v github.com/golang/lint/golint
 
 # TODO replace FPM with some very minimal debhelper stuff
+RUN gem install --no-rdoc --no-ri json --version 1.7.7
 RUN gem install --no-rdoc --no-ri fpm --version 1.3.2
 
 # Install registry
