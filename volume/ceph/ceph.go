@@ -172,7 +172,7 @@ func (v *Volume) use() error {
 	if v.usedCount > 1 {
 		msg := fmt.Sprintf("The Ceph volume '%s' is already being used by a running container in this Docker daemon", v.Name())
 		logrus.Errorf(msg)
-		return errors.New(msg)
+		//return errors.New(msg)
 	}
 	return nil
 }
@@ -182,7 +182,7 @@ func (v *Volume) release() error {
 	if v.usedCount == 0 { // Shouldn't happen as long as Docker calls Mount()/Unmount() the way we think, but we've misunderstood the call sequence before
 		msg := fmt.Sprintf("Bug: The Ceph volume '%s' is being released more times than it has been used", v.Name())
 		logrus.Errorf(msg)
-		return errors.New(msg)
+		//return errors.New(msg)
 	}
 	v.usedCount--
 	return nil

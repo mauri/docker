@@ -142,7 +142,7 @@ func (v *Volume) release() error {
 	if v.usedCount == 0 { // Shouldn't happen as long as Docker calls Mount()/Unmount() the way we think, but we've misunderstood the call sequence before
 		msg := fmt.Sprintf("Bug: The nfs volume '%s' is being released more times than it has been used", v.Name())
 		logrus.Errorf(msg)
-		return errors.New(msg)
+		//return errors.New(msg)
 	}
 	v.usedCount--
 	return nil
