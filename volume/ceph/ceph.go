@@ -73,6 +73,7 @@ func (r *Root) Remove(v volume.Volume) error {
 }
 
 func unmapCephVolume(name, mappedDevicePath string) error {
+	logrus.Infof("Unmapping device '%s'. Image '%s'", mappedDevicePath, name)
 	cmd := exec.Command("rbd", "unmap", mappedDevicePath)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -80,7 +81,7 @@ func unmapCephVolume(name, mappedDevicePath string) error {
 	if err == nil {
 		logrus.Infof("Succeeded in unmapping Ceph volume '%s' from %s", name, mappedDevicePath)
 	} else {
-		logrus.Errorf("Failed to unmap Ceph volume '%s' from %s: %s - %s", name, mappedDevicePath, err, strings.TrimRight(stderr.String(), "\n"))
+		logrus.Errorf("Failed to unmap Ceph volume '%s' from %s: %s - %s", name, mappedDevicePath, err, strings.TrimRight(stderr.String(), "\n"))	
 	}
 	return err
 }
@@ -111,7 +112,7 @@ func (v *Volume) Path() string {
 func (v *Volume) Mount() (mappedDevicePath string, returnedError error) {
 	v.m.Lock()
 	defer v.m.Unlock()
-
+	logrus.Infof("Mounting device '%s'. Image '%s'", mappedDevicePath, v.Name())
 	// Note that if Mount() returns an error, Docker will still call Unmount(), so there is no need to call release() if anything fails
 	if err := v.use(); err != nil {
 		return "", err
@@ -128,6 +129,7 @@ func (v *Volume) Mount() (mappedDevicePath string, returnedError error) {
 		logrus.Infof("Created Ceph volume '%s'", v.Name())
 		v.mappedDevicePath, err = mapCephVolume(v.Name())
 		if err != nil {
+			logrus.Errorf("Failed to map Ceph volume '%s'", v.Name())
 			return "", err
 		}
 		cmd = exec.Command("mkfs.ext4", "-m0", v.mappedDevicePath)
@@ -155,6 +157,7 @@ func (v *Volume) Mount() (mappedDevicePath string, returnedError error) {
 func (v *Volume) Unmount() error {
 	v.m.Lock()
 	defer v.m.Unlock()
+	logrus.Infof("Unmounting ceph volume '%s' using device '%s'", v.name, v.mappedDevicePath)
 
 	if err := v.release(); err != nil {
 		return err
@@ -178,6 +181,7 @@ func (v *Volume) use() error {
 }
 
 func (v *Volume) release() error {
+	logrus.Infof("Releasing ceph volume '%s'", v.Name())
 	// Note that the call to release() is assumed to be contained in a v.m.Lock()/Unlock() (the mutex isn't reentrant, so we can't lock it again here)
 	if v.usedCount == 0 { // Shouldn't happen as long as Docker calls Mount()/Unmount() the way we think, but we've misunderstood the call sequence before
 		msg := fmt.Sprintf("Bug: The Ceph volume '%s' is being released more times than it has been used", v.Name())
