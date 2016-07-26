@@ -162,9 +162,8 @@ func (v *Volume) Unmount() error {
 	if err := v.release(); err != nil {
 		return err
 	}
-	if v.usedCount == 0 { // Even if the volume is attempted to be used multiple times, only the first use will actually succeed in mapping it
-		unmapCephVolume(v.name, v.mappedDevicePath)
-	}
+	logrus.Infof("Volume count for %s is currently %d", v.name, v.usedCount)
+	unmapCephVolume(v.name, v.mappedDevicePath) // Always try to unmap the volume
 
 	return nil
 }
