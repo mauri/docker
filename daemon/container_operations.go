@@ -425,6 +425,7 @@ func hasUserDefinedIPAddress(epConfig *networktypes.EndpointSettings) bool {
 
 // User specified ip address is acceptable only for networks with user specified subnets.
 func validateNetworkingConfig(n libnetwork.Network, epConfig *networktypes.EndpointSettings) error {
+	logrus.Debugf("validateNetworkingConfig \n %+v \n\n endpointsettings %s", n.Info(), epConfig)
 	if n == nil || epConfig == nil {
 		return nil
 	}
@@ -452,6 +453,9 @@ func validateNetworkingConfig(n libnetwork.Network, epConfig *networktypes.Endpo
 					foundSubnet = true
 					break
 				}
+			}
+			if n.Type() == "routed" {
+				break
 			}
 			if !foundSubnet {
 				return runconfig.ErrUnsupportedNetworkNoSubnetAndIP
@@ -484,7 +488,7 @@ func (daemon *Daemon) updateNetworkConfig(container *container.Container, idOrNa
 		container.Config.NetworkDisabled = true
 		return nil, nil
 	}
-
+	logrus.Debugf("## Network Mode %s", idOrName)	
 	if !containertypes.NetworkMode(idOrName).IsUserDefined() {
 		if hasUserDefinedIPAddress(endpointConfig) {
 			return nil, runconfig.ErrUnsupportedNetworkAndIP

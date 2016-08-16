@@ -30,7 +30,9 @@ clone git github.com/RackSec/srslog 259aed10dfa74ea2961eddd1d9847619f6e98837
 clone git github.com/imdario/mergo 0.2.1
 
 #get libnetwork packages
-clone git github.com/docker/libnetwork v0.7.2-rc.1
+#clone git github.com/docker/libnetwork b4ddf18317b19d6e4bcc821145589749206a7d00
+# Pointing to our patches of libnetwork
+clone git github.com/docker/libnetwork 9876affaed02879b20a954b9fc9c75b32e513308 https://github.com/medallia/libnetwork.git
 clone git github.com/armon/go-metrics eb0af217e5e9747e41dd5303755356b62d28e3ec
 clone git github.com/hashicorp/go-msgpack 71c2886f5a673a35f909803f38ece5810165097b
 clone git github.com/hashicorp/memberlist 9a1e242e454d2443df330bdd51a436d5a9058fc4
@@ -60,7 +62,11 @@ clone git github.com/miekg/pkcs11 df8ae6ca730422dba20c768ff38ef7d79077a59f
 clone git github.com/docker/go v1.5.1-1-1-gbaf439e
 clone git github.com/agl/ed25519 d2b94fd789ea21d12fac1a4443dd3a3f79cda72c
 
-clone git github.com/opencontainers/runc baf6536d6259209c3edfa2b22237af82942d3dfa # libcontainer
+
+#clone git github.com/opencontainers/runc baf6536d6259209c3edfa2b22237af82942d3dfa # libcontainer
+# Pointing to our patches of runc
+clone git github.com/opencontainers/runc 908bd425e51c485cd13aa1af4478f6d52c9766f5 https://github.com/medallia/runc.git
+
 clone git github.com/opencontainers/specs f955d90e70a98ddfb886bd930ffd076da9b67998 # specs
 clone git github.com/seccomp/libseccomp-golang 1b506fc7c24eec5a3693cdcbed40d9c226cfc6a1
 # libcontainer deps (see src/github.com/opencontainers/runc/Godeps/Godeps.json)

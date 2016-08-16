@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/docker/docker/opts"
+	"github.com/docker/docker/volume"
 	flag "github.com/docker/docker/pkg/mflag"
 	"github.com/docker/docker/pkg/mount"
 	"github.com/docker/docker/pkg/signal"
@@ -85,6 +86,7 @@ func Parse(cmd *flag.FlagSet, args []string) (*container.Config, *container.Host
 		flNetMode           = cmd.String([]string{"-net"}, "default", "Connect a container to a network")
 		flMacAddress        = cmd.String([]string{"-mac-address"}, "", "Container MAC address (e.g. 92:d0:c6:0a:29:33)")
 		flIPv4Address       = cmd.String([]string{"-ip"}, "", "Container IPv4 address (e.g. 172.30.100.104)")
+		flIp4Addresses      = cmd.String([]string{"-ip-address"}, "", "Container IP4 addresses separated by comma (e.g. 10.4.4.2,10.2.2.2)")
 		flIPv6Address       = cmd.String([]string{"-ip6"}, "", "Container IPv6 address (e.g. 2001:db8::33)")
 		flIpcMode           = cmd.String([]string{"-ipc"}, "", "IPC namespace to use")
 		flPidsLimit         = cmd.Int64([]string{"-pids-limit"}, 0, "Tune container pids limit (set -1 for unlimited)")
@@ -433,10 +435,14 @@ func Parse(cmd *flag.FlagSet, args []string) (*container.Config, *container.Host
 		EndpointsConfig: make(map[string]*networktypes.EndpointSettings),
 	}
 
-	if *flIPv4Address != "" || *flIPv6Address != "" {
+	if *flIPv4Address != "" || *flIPv6Address != "" || *flIp4Addresses != "" {
+		ipv4Addresses := *flIPv4Address
+		if len(*flIp4Addresses) > 0 {
+			ipv4Addresses = *flIp4Addresses
+		}
 		networkingConfig.EndpointsConfig[string(hostConfig.NetworkMode)] = &networktypes.EndpointSettings{
 			IPAMConfig: &networktypes.EndpointIPAMConfig{
-				IPv4Address: *flIPv4Address,
+				IPv4Address: ipv4Addresses,
 				IPv6Address: *flIPv6Address,
 			},
 		}
@@ -662,6 +668,16 @@ func ValidDeviceMode(mode string) bool {
 // It also validates the device mode.
 func ValidateDevice(val string) (string, error) {
 	return validatePath(val, ValidDeviceMode)
+}
+
+// ValidatePath validates a path for volumes
+// It will make sure 'val' is in the form:
+//    [host-dir:]container-path[:typeAndMode]
+// It also validates the mount mode.
+// typeAndMode is the mount mode and an optional volume type,
+// joined by a ","
+func ValidatePath(val string) (string, error) {
+	return validatePath(val, volume.ValidMountTypeAndMode)
 }
 
 func validatePath(val string, validator func(string) bool) (string, error) {

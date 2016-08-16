@@ -18,6 +18,7 @@ import (
 
 // ContainerCreate creates a container.
 func (daemon *Daemon) ContainerCreate(params types.ContainerCreateConfig) (types.ContainerCreateResponse, error) {
+	logrus.Debugf("## Creating Container %s ", params.Config)
 	if params.Config == nil {
 		return types.ContainerCreateResponse{}, fmt.Errorf("Config cannot be empty in order to create a container")
 	}

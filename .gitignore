@@ -7,6 +7,7 @@
 *.test
 .*.swp
 .DS_Store
+.idea/
 .gopath/
 autogen/
 bundles/

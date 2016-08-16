@@ -65,7 +65,9 @@ import (
 	"github.com/docker/docker/runconfig"
 	"github.com/docker/docker/utils"
 	volumedrivers "github.com/docker/docker/volume/drivers"
+	"github.com/docker/docker/volume/ceph"
 	"github.com/docker/docker/volume/local"
+	"github.com/docker/docker/volume/nfs"
 	"github.com/docker/docker/volume/store"
 	"github.com/docker/go-connections/nat"
 	"github.com/docker/libnetwork"
@@ -1537,6 +1539,11 @@ func configureVolumes(config *Config, rootUID, rootGID int) (*store.VolumeStore,
 	}
 
 	volumedrivers.Register(volumesDriver, volumesDriver.Name())
+	
+	cephVolumesDriver := cephvolumedriver.New()
+	volumedrivers.Register(cephVolumesDriver, cephVolumesDriver.Name())
+	nfsVolumesDriver := nfsvolumedriver.New()
+	volumedrivers.Register(nfsVolumesDriver, nfsVolumesDriver.Name())
 	return store.New(config.Root)
 }
 

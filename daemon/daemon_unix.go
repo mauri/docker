@@ -637,6 +637,10 @@ func (daemon *Daemon) initNetworkController(config *Config) (libnetwork.NetworkC
 		return nil, fmt.Errorf("Error creating default \"host\" network: %v", err)
 	}
 
+	if err := initRoutedDriver(controller, config); err != nil {
+		return nil, err
+	}
+
 	if !config.DisableBridge {
 		// Initialize default driver "bridge"
 		if err := initBridgeDriver(controller, config); err != nil {
@@ -645,6 +649,13 @@ func (daemon *Daemon) initNetworkController(config *Config) (libnetwork.NetworkC
 	}
 
 	return controller, nil
+}
+
+func initRoutedDriver(controller libnetwork.NetworkController, config *Config) error {
+	if _, err := controller.NewNetwork("routed", "routed", libnetwork.NetworkOptionPersist(false)); err != nil {
+		return fmt.Errorf("Error creating default \"routed\" network: %v", err)
+	}
+	return nil
 }
 
 func driverOptions(config *Config) []nwconfig.Option {

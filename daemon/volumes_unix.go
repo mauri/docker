@@ -3,9 +3,11 @@
 package daemon
 
 import (
+	"fmt"
 	"os"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/docker/docker/container"
 	"github.com/docker/docker/volume"
@@ -26,7 +28,7 @@ func (daemon *Daemon) setupMounts(c *container.Container) ([]container.Mount, er
 		}
 		if !c.TrySetNetworkMount(m.Destination, path) {
 			mnt := container.Mount{
-				Source:      path,
+				Source:      path, // Note that for Ceph volumes, this will be the mapped device (e.g. /dev/rbd0), and for NFS shares, it will be the share URI (e.g. 1.2.3.4://foo)
 				Destination: m.Destination,
 				Writable:    m.RW,
 				Propagation: m.Propagation,
@@ -40,6 +42,12 @@ func (daemon *Daemon) setupMounts(c *container.Container) ([]container.Mount, er
 					"propagation": m.Propagation,
 				}
 				daemon.LogVolumeEvent(m.Volume.Name(), "mount", attributes)
+			}
+			if m.Driver == "nfs" || m.Driver == "ceph" {
+				mnt.Data = m.Driver
+				if m.Driver == "nfs" {
+					mnt.Source = strings.Replace(path, "//", "://", 1)
+				}
 			}
 			mounts = append(mounts, mnt)
 		}
@@ -57,6 +65,37 @@ func (daemon *Daemon) setupMounts(c *container.Container) ([]container.Mount, er
 		}
 	}
 	return append(mounts, netMounts...), nil
+}
+
+func parseMountMode(mode string) (bool, string, string, error) {
+	rw := false
+	rwSpecified := false
+	sharingSpecified := false
+	var labelItems []string
+	driver := ""
+	for _, item := range strings.Split(mode, ",") {
+		switch item {
+		case "rw", "ro":
+			if rwSpecified {
+				return false, "", "", fmt.Errorf("invalid mode for volumes: %s", mode)
+			}
+			rw = item == "rw"
+			rwSpecified = true
+			labelItems = append(labelItems, item)
+		case "z", "Z":
+			if sharingSpecified {
+				return false, "", "", fmt.Errorf("invalid mode for volumes: %s", mode)
+			}
+			sharingSpecified = true
+			labelItems = append(labelItems, item)
+		case "ceph", "nfs":
+			if driver != "" {
+				return false, "", "", fmt.Errorf("invalid mode for volumes: %s", mode)
+			}
+			driver = item
+		}
+	}
+	return rw, strings.Join(labelItems, ","), driver, nil
 }
 
 // sortMounts sorts an array of mounts in lexicographic order. This ensure that

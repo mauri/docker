@@ -37,6 +37,7 @@ import (
 	"github.com/docker/libnetwork/netlabel"
 	"github.com/docker/libnetwork/options"
 	"github.com/docker/libnetwork/types"
+	"github.com/docker/libnetwork/drivers/routed"
 	"github.com/opencontainers/runc/libcontainer/label"
 )
 
@@ -780,7 +781,49 @@ func (container *Container) BuildCreateEndpointOptions(n libnetwork.Network, epC
 		pbList        []types.PortBinding
 		exposeList    []types.TransportPort
 		createOptions []libnetwork.EndpointOption
+		ip4Addr       []net.IPNet
 	)
+
+	if n.Name() == "routed" {
+		var ipAddresses string
+		if container.Config.Labels[netlabel.IPv4Addresses] != "" {
+			ipAddresses = container.Config.Labels[netlabel.IPv4Addresses]	
+		} else {
+			ipAddresses = epConfig.IPAMConfig.IPv4Address // Assigned on runconfig/opts/parse.go
+		}
+		if ipAddresses == "" {
+			return nil, fmt.Errorf("Configure Ip Addresses in routed mode using the label %s", netlabel.IPv4Addresses)
+		}
+
+		for _, ipAddress := range strings.Split(ipAddresses, ",") {
+			ipAddress = strings.TrimSpace(ipAddress)
+
+			parsedNet := routed.ParseIpOrNet(ipAddress)
+			if parsedNet == nil {
+				return nil, fmt.Errorf("%s is not a valid IPv4 Address", ipAddress)
+			}
+			if ones, _ := parsedNet.Mask.Size(); ones != 32 {
+				return nil, fmt.Errorf("%s CIDR should have a /32 mask", ipAddress)
+			}
+
+			logrus.Debugf("IP Address: %s", parsedNet.IP)
+			ip4Addr = append(ip4Addr, *parsedNet)
+		}
+		
+		if len(ip4Addr) == 0 {
+			return nil, fmt.Errorf("No valid IPv4 addresses found in label %s", netlabel.IPv4Addresses)
+		}
+		netFilterConfig, err := routed.NetFilterConfigParse(container.Config.Labels[netlabel.IngressAllowed])
+		if err != nil {
+			return nil, fmt.Errorf("No valid value for label %s, %v", netlabel.IngressAllowed, err)
+		}
+
+		addrOption := options.Generic{
+			netlabel.IPv4Addresses: ip4Addr,
+			netlabel.IngressAllowed: netFilterConfig,
+		}
+		createOptions = append(createOptions, libnetwork.EndpointOptionGeneric(addrOption))
+	}
 
 	defaultNetName := runconfig.DefaultDaemonNetworkMode().NetworkName()
 

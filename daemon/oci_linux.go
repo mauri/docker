@@ -96,6 +96,16 @@ func setDevices(s *specs.Spec, c *container.Container) error {
 			},
 		}
 	} else {
+		// Add rbd devices
+		hostDevices, err := devices.HostDevices()
+		if err != nil {
+			return err
+		}
+		for _, dev := range hostDevices {
+			if strings.HasPrefix(dev.Path, "/dev/rbd") {
+				devs = append(devs, specDevice(dev))
+			}
+		}
 		for _, deviceMapping := range c.HostConfig.Devices {
 			d, dPermissions, err := getDevicesFromPath(deviceMapping)
 			if err != nil {
@@ -472,9 +482,8 @@ func setMounts(daemon *Daemon, s *specs.Spec, c *container.Container, mounts []c
 			s.Mounts = append(s.Mounts, specs.Mount{Destination: m.Destination, Source: m.Source, Type: "tmpfs", Options: opt})
 			continue
 		}
-
+	
 		mt := specs.Mount{Destination: m.Destination, Source: m.Source, Type: "bind"}
-
 		// Determine property of RootPropagation based on volume
 		// properties. If a volume is shared, then keep root propagation
 		// shared. This should work for slave and private volumes too.
@@ -502,14 +511,20 @@ func setMounts(daemon *Daemon, s *specs.Spec, c *container.Container, mounts []c
 		}
 
 		opts := []string{"rbind"}
+
+		if m.Data == "nfs" || m.Data == "ceph" {
+			mt.Type = m.Data
+			opts = []string{"defaults"}
+		} else if pFlag != 0 {
+			opts = append(opts, mountPropagationReverseMap[pFlag])
+		}
+		
 		if !m.Writable {
 			opts = append(opts, "ro")
 		}
-		if pFlag != 0 {
-			opts = append(opts, mountPropagationReverseMap[pFlag])
-		}
 
 		mt.Options = opts
+		logrus.Debugf("setMounts: mount: %s ----  %s --- (%s) - %n", mt.Source, mt.Destination, mt.Type, mt.Options)
 		s.Mounts = append(s.Mounts, mt)
 	}
 
