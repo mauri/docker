@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/docker/docker/opts"
+	"github.com/docker/docker/volume"
 	"github.com/docker/docker/pkg/mount"
 	"github.com/docker/docker/pkg/signal"
 	"github.com/docker/engine-api/types/container"
@@ -86,6 +87,7 @@ type ContainerOptions struct {
 	flNetMode           string
 	flMacAddress        string
 	flIPv4Address       string
+	flIPv4Addresses     string
 	flIPv6Address       string
 	flIpcMode           string
 	flPidsLimit         int64
@@ -178,6 +180,7 @@ func AddFlags(flags *pflag.FlagSet) *ContainerOptions {
 	flags.Var(&copts.flDNSSearch, "dns-search", "Set custom DNS search domains")
 	flags.Var(&copts.flExpose, "expose", "Expose a port or a range of ports")
 	flags.StringVar(&copts.flIPv4Address, "ip", "", "Container IPv4 address (e.g. 172.30.100.104)")
+	flags.StringVar(&copts.flIPv4Addresses, "ip-address", "", "Container IPv4 addresses separated by comma (e.g. 10.4.4.2,10.2.2.2)")
 	flags.StringVar(&copts.flIPv6Address, "ip6", "", "Container IPv6 address (e.g. 2001:db8::33)")
 	flags.Var(&copts.flLinks, "link", "Add link to another container")
 	flags.Var(&copts.flLinkLocalIPs, "link-local-ip", "Container IPv4/IPv6 link-local addresses")
@@ -595,14 +598,18 @@ func Parse(flags *pflag.FlagSet, copts *ContainerOptions) (*container.Config, *c
 		EndpointsConfig: make(map[string]*networktypes.EndpointSettings),
 	}
 
-	if copts.flIPv4Address != "" || copts.flIPv6Address != "" || copts.flLinkLocalIPs.Len() > 0 {
+	if copts.flIPv4Address != "" || copts.flIPv6Address != "" || copts.flLinkLocalIPs.Len() > 0 || copts.flIPv4Addresses != "" {
 		epConfig := &networktypes.EndpointSettings{}
 		networkingConfig.EndpointsConfig[string(hostConfig.NetworkMode)] = epConfig
-
+		ipv4Addresses := copts.flIPv4Address
+		if len(copts.flIPv4Addresses) > 0 {
+			ipv4Addresses = copts.flIPv4Addresses
+		}
 		epConfig.IPAMConfig = &networktypes.EndpointIPAMConfig{
-			IPv4Address: copts.flIPv4Address,
+			IPv4Address: ipv4Addresses,
 			IPv6Address: copts.flIPv6Address,
 		}
+
 
 		if copts.flLinkLocalIPs.Len() > 0 {
 			epConfig.IPAMConfig.LinkLocalIPs = make([]string, copts.flLinkLocalIPs.Len())
@@ -845,6 +852,16 @@ func ValidDeviceMode(mode string) bool {
 // It also validates the device mode.
 func ValidateDevice(val string) (string, error) {
 	return validatePath(val, ValidDeviceMode)
+}
+
+// ValidatePath validates a path for volumes
+// It will make sure 'val' is in the form:
+//    [host-dir:]container-path[:typeAndMode]
+// It also validates the mount mode.
+// typeAndMode is the mount mode and an optional volume type,
+// joined by a ","
+func ValidatePath(val string) (string, error) {
+	return validatePath(val, volume.ValidMountTypeAndMode)
 }
 
 func validatePath(val string, validator func(string) bool) (string, error) {

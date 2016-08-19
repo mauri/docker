@@ -52,7 +52,9 @@ import (
 	"github.com/docker/docker/runconfig"
 	"github.com/docker/docker/utils"
 	volumedrivers "github.com/docker/docker/volume/drivers"
+	"github.com/docker/docker/volume/ceph"
 	"github.com/docker/docker/volume/local"
+	"github.com/docker/docker/volume/nfs"
 	"github.com/docker/docker/volume/store"
 	"github.com/docker/libnetwork"
 	nwconfig "github.com/docker/libnetwork/config"
@@ -852,6 +854,12 @@ func (daemon *Daemon) configureVolumes(rootUID, rootGID int) (*store.VolumeStore
 	if !volumedrivers.Register(volumesDriver, volumesDriver.Name()) {
 		return nil, fmt.Errorf("local volume driver could not be registered")
 	}
+	// add custom drivers
+	cephVolumesDriver := cephvolumedriver.New()
+	volumedrivers.Register(cephVolumesDriver, cephVolumesDriver.Name())
+	nfsVolumesDriver := nfsvolumedriver.New()
+	volumedrivers.Register(nfsVolumesDriver, nfsVolumesDriver.Name())
+
 	return store.New(daemon.configStore.Root)
 }
 
