@@ -535,10 +535,6 @@ func (ep *endpoint) sbJoin(sb *sandbox, options ...EndpointOption) error {
 					ep.Name(), ep.ID(), err)
 			}
 		}
-
-		if sb.resolver != nil {
-			sb.resolver.FlushExtServers()
-		}
 	}
 
 	if !sb.needDefaultGW() {
@@ -618,10 +614,6 @@ func (ep *endpoint) Leave(sbox Sandbox, options ...EndpointOption) error {
 
 	sb.joinLeaveStart()
 	defer sb.joinLeaveEnd()
-
-	if sb.resolver != nil {
-		sb.resolver.FlushExtServers()
-	}
 
 	return ep.sbLeave(sb, false, options...)
 }
@@ -717,18 +709,6 @@ func (ep *endpoint) sbLeave(sb *sandbox, force bool, options ...EndpointOption) 
 			log.Warnf("Failure while disconnecting sandbox %s (%s) from gateway network: %v",
 				sb.ID(), sb.ContainerID(), err)
 		}
-	}
-
-	return nil
-}
-
-func (n *network) validateForceDelete(locator string) error {
-	if n.Scope() == datastore.LocalScope {
-		return nil
-	}
-
-	if locator == "" {
-		return fmt.Errorf("invalid endpoint locator identifier")
 	}
 
 	return nil

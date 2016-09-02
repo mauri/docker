@@ -68,7 +68,7 @@ clone git github.com/imdario/mergo 0.2.1
 # Pointing to our patches of libnetwork
 # clone git github.com/docker/libnetwork 9876affaed02879b20a954b9fc9c75b32e513308 https://github.com/medallia/libnetwork.git
 #clone git github.com/docker/libnetwork 82fb373e3eaa4e9bbb5b5ac148b0a3a71f80fca6
-clone git github.com/docker/libnetwork e35d732a2045980a30bae8dde1255f57d4b0aabe https://github.com/medallia/libnetwork.git
+clone git github.com/docker/libnetwork c7a27813c1bd5d0f067ce11808c6a1b441a28b19 https://github.com/medallia/libnetwork.git
 clone git github.com/docker/go-events afb2b9f2c23f33ada1a22b03651775fdc65a5089
 clone git github.com/armon/go-radix e39d623f12e8e41c7b5529e9a9dd67a1e2261f80
 clone git github.com/armon/go-metrics eb0af217e5e9747e41dd5303755356b62d28e3ec
