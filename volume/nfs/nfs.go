@@ -2,9 +2,9 @@ package nfsvolumedriver
 
 import (
 	"errors"
-	"sync"
 	"fmt"
-	
+	"sync"
+
 	"github.com/docker/docker/volume"
 )
 
@@ -30,8 +30,8 @@ func (r *Root) Create(name string, _ map[string]string) (volume.Volume, error) {
 	v, exists := r.volumes[name]
 	if !exists {
 		v = &Volume{
-			driverName:       r.Name(),
-			name:             name,
+			driverName: r.Name(),
+			name:       name,
 		}
 		r.volumes[name] = v
 	}
@@ -59,6 +59,10 @@ func (r *Root) List() ([]volume.Volume, error) {
 	}
 	r.m.Unlock()
 	return ls, nil
+}
+
+func (r *Root) Scope() string {
+	return volume.LocalScope
 }
 
 func (r *Root) Remove(v volume.Volume) error {
@@ -97,12 +101,16 @@ func (v *Volume) Path() string {
 	return ""
 }
 
-func (v *Volume) Mount() (string, error) {
+func (v *Volume) Mount(id string) (string, error) {
 	// The return value from this method will be passed to the container
 	return v.name, nil
 }
 
-func (v *Volume) Unmount() error {
+func (v *Volume) Unmount(id string) error {
+	return nil
+}
+
+func (v *Volume) Status() map[string]interface{} {
 	return nil
 }
 

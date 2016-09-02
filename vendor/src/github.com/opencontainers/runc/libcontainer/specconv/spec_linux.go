@@ -145,6 +145,7 @@ type CreateOpts struct {
 	CgroupName       string
 	UseSystemdCgroup bool
 	NoPivotRoot      bool
+	NoNewKeyring     bool
 	Spec             *specs.Spec
 }
 
@@ -165,14 +166,17 @@ func CreateLibcontainerConfig(opts *CreateOpts) (*configs.Config, error) {
 	if !filepath.IsAbs(rootfsPath) {
 		rootfsPath = filepath.Join(cwd, rootfsPath)
 	}
+	labels := []string{}
+	for k, v := range spec.Annotations {
+		labels = append(labels, fmt.Sprintf("%s=%s", k, v))
+	}
 	config := &configs.Config{
-		Rootfs:      rootfsPath,
-		NoPivotRoot: opts.NoPivotRoot,
-		Readonlyfs:  spec.Root.Readonly,
-		Hostname:    spec.Hostname,
-		Labels: []string{
-			"bundle=" + cwd,
-		},
+		Rootfs:       rootfsPath,
+		NoPivotRoot:  opts.NoPivotRoot,
+		Readonlyfs:   spec.Root.Readonly,
+		Hostname:     spec.Hostname,
+		Labels:       append(labels, fmt.Sprintf("bundle=%s", cwd)),
+		NoNewKeyring: opts.NoNewKeyring,
 	}
 
 	exists := false
@@ -218,9 +222,12 @@ func CreateLibcontainerConfig(opts *CreateOpts) (*configs.Config, error) {
 		}
 		config.Seccomp = seccomp
 	}
+	if spec.Process.SelinuxLabel != "" {
+		config.ProcessLabel = spec.Process.SelinuxLabel
+	}
 	config.Sysctl = spec.Linux.Sysctl
-	if oomScoreAdj := spec.Linux.Resources.OOMScoreAdj; oomScoreAdj != nil {
-		config.OomScoreAdj = *oomScoreAdj
+	if spec.Linux.Resources != nil && spec.Linux.Resources.OOMScoreAdj != nil {
+		config.OomScoreAdj = *spec.Linux.Resources.OOMScoreAdj
 	}
 	for _, g := range spec.Process.User.AdditionalGids {
 		config.AdditionalGroups = append(config.AdditionalGroups, strconv.FormatUint(uint64(g), 10))
@@ -387,7 +394,14 @@ func createCgroupConfig(name string, useSystemdCgroup bool, spec *specs.Spec) (*
 		}
 		if r.BlockIO.WeightDevice != nil {
 			for _, wd := range r.BlockIO.WeightDevice {
-				weightDevice := configs.NewWeightDevice(wd.Major, wd.Minor, *wd.Weight, *wd.LeafWeight)
+				var weight, leafWeight uint16
+				if wd.Weight != nil {
+					weight = *wd.Weight
+				}
+				if wd.LeafWeight != nil {
+					leafWeight = *wd.LeafWeight
+				}
+				weightDevice := configs.NewWeightDevice(wd.Major, wd.Minor, weight, leafWeight)
 				c.Resources.BlkioWeightDevice = append(c.Resources.BlkioWeightDevice, weightDevice)
 			}
 		}
@@ -540,10 +554,6 @@ func createDevices(spec *specs.Spec, config *configs.Config) error {
 func setupUserNamespace(spec *specs.Spec, config *configs.Config) error {
 	if len(spec.Linux.UIDMappings) == 0 {
 		return nil
-	}
-	// do not override the specified user namespace path
-	if config.Namespaces.PathOf(configs.NEWUSER) == "" {
-		config.Namespaces.Add(configs.NEWUSER, "")
 	}
 	create := func(m specs.IDMapping) configs.IDMap {
 		return configs.IDMap{

@@ -15,50 +15,6 @@ import (
 	"github.com/docker/libnetwork/types"
 )
 
-func TestDriverRegistration(t *testing.T) {
-	bridgeNetType := "bridge"
-	c, err := New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer c.Stop()
-	err = c.(*controller).RegisterDriver(bridgeNetType, nil, driverapi.Capability{})
-	if err == nil {
-		t.Fatalf("Expecting the RegisterDriver to fail for %s", bridgeNetType)
-	}
-	if _, ok := err.(driverapi.ErrActiveRegistration); !ok {
-		t.Fatalf("Failed for unexpected reason: %v", err)
-	}
-	err = c.(*controller).RegisterDriver("test-dummy", nil, driverapi.Capability{})
-	if err != nil {
-		t.Fatalf("Test failed with an error %v", err)
-	}
-}
-
-func TestIpamDriverRegistration(t *testing.T) {
-	c, err := New()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer c.Stop()
-
-	err = c.(*controller).RegisterIpamDriver("", nil)
-	if err == nil {
-		t.Fatalf("Expected failure, but succeeded")
-	}
-	if _, ok := err.(types.BadRequestError); !ok {
-		t.Fatalf("Failed for unexpected reason: %v", err)
-	}
-
-	err = c.(*controller).RegisterIpamDriver(ipamapi.DefaultIPAM, nil)
-	if err == nil {
-		t.Fatalf("Expected failure, but succeeded")
-	}
-	if _, ok := err.(types.ForbiddenError); !ok {
-		t.Fatalf("Failed for unexpected reason: %v", err)
-	}
-}
-
 func TestNetworkMarshalling(t *testing.T) {
 	n := &network{
 		name:        "Miao",
@@ -362,6 +318,106 @@ func TestAuxAddresses(t *testing.T) {
 	}
 }
 
+func TestSRVServiceQuery(t *testing.T) {
+	c, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Stop()
+
+	n, err := c.NewNetwork("bridge", "net1", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := n.Delete(); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	ep, err := n.CreateEndpoint("testep")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sb, err := c.NewSandbox("c1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := sb.Delete(); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	err = ep.Join(sb)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sr := svcInfo{
+		svcMap:     make(map[string][]net.IP),
+		svcIPv6Map: make(map[string][]net.IP),
+		ipMap:      make(map[string]string),
+		service:    make(map[string][]servicePorts),
+	}
+	// backing container for the service
+	cTarget := serviceTarget{
+		name: "task1.web.swarm",
+		ip:   net.ParseIP("192.168.10.2"),
+		port: 80,
+	}
+	// backing host for the service
+	hTarget := serviceTarget{
+		name: "node1.docker-cluster",
+		ip:   net.ParseIP("10.10.10.2"),
+		port: 45321,
+	}
+	httpPort := servicePorts{
+		portName: "_http",
+		proto:    "_tcp",
+		target:   []serviceTarget{cTarget},
+	}
+
+	extHTTPPort := servicePorts{
+		portName: "_host_http",
+		proto:    "_tcp",
+		target:   []serviceTarget{hTarget},
+	}
+	sr.service["web.swarm"] = append(sr.service["web.swarm"], httpPort)
+	sr.service["web.swarm"] = append(sr.service["web.swarm"], extHTTPPort)
+
+	c.(*controller).svcRecords[n.ID()] = sr
+
+	_, ip, err := ep.Info().Sandbox().ResolveService("_http._tcp.web.swarm")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ip) == 0 {
+		t.Fatal(err)
+	}
+	if ip[0].String() != "192.168.10.2" {
+		t.Fatal(err)
+	}
+
+	_, ip, err = ep.Info().Sandbox().ResolveService("_host_http._tcp.web.swarm")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ip) == 0 {
+		t.Fatal(err)
+	}
+	if ip[0].String() != "10.10.10.2" {
+		t.Fatal(err)
+	}
+
+	// Service name with invalid protocol name. Should fail without error
+	_, ip, err = ep.Info().Sandbox().ResolveService("_http._icmp.web.swarm")
+	if len(ip) != 0 {
+		t.Fatal("Valid response for invalid service name")
+	}
+}
+
 func TestIpamReleaseOnNetDriverFailures(t *testing.T) {
 	if !testutils.IsRunningInContainer() {
 		defer testutils.SetupTestOSContext(t)()
@@ -375,17 +431,19 @@ func TestIpamReleaseOnNetDriverFailures(t *testing.T) {
 	defer c.Stop()
 
 	cc := c.(*controller)
-	bd := badDriver{failNetworkCreation: true}
-	cc.drivers[badDriverName] = &driverData{driver: &bd, capability: driverapi.Capability{DataScope: datastore.LocalScope}}
+
+	if err := cc.drvRegistry.AddDriver(badDriverName, badDriverInit, nil); err != nil {
+		t.Fatal(err)
+	}
 
 	// Test whether ipam state release is invoked  on network create failure from net driver
 	// by checking whether subsequent network creation requesting same gateway IP succeeds
 	ipamOpt := NetworkOptionIpam(ipamapi.DefaultIPAM, "", []*IpamConf{{PreferredPool: "10.34.0.0/16", Gateway: "10.34.255.254"}}, nil, nil)
-	if _, err := c.NewNetwork(badDriverName, "badnet1", ipamOpt); err == nil {
+	if _, err := c.NewNetwork(badDriverName, "badnet1", "", ipamOpt); err == nil {
 		t.Fatalf("bad network driver should have failed network creation")
 	}
 
-	gnw, err := c.NewNetwork("bridge", "goodnet1", ipamOpt)
+	gnw, err := c.NewNetwork("bridge", "goodnet1", "", ipamOpt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -393,7 +451,7 @@ func TestIpamReleaseOnNetDriverFailures(t *testing.T) {
 
 	// Now check whether ipam release works on endpoint creation failure
 	bd.failNetworkCreation = false
-	bnw, err := c.NewNetwork(badDriverName, "badnet2", ipamOpt)
+	bnw, err := c.NewNetwork(badDriverName, "badnet2", "", ipamOpt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -405,7 +463,7 @@ func TestIpamReleaseOnNetDriverFailures(t *testing.T) {
 
 	// Now create good bridge network with different gateway
 	ipamOpt2 := NetworkOptionIpam(ipamapi.DefaultIPAM, "", []*IpamConf{{PreferredPool: "10.34.0.0/16", Gateway: "10.34.255.253"}}, nil, nil)
-	gnw, err = c.NewNetwork("bridge", "goodnet2", ipamOpt2)
+	gnw, err = c.NewNetwork("bridge", "goodnet2", "", ipamOpt2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -429,7 +487,13 @@ type badDriver struct {
 	failNetworkCreation bool
 }
 
-func (b *badDriver) CreateNetwork(nid string, options map[string]interface{}, ipV4Data, ipV6Data []driverapi.IPAMData) error {
+var bd = badDriver{failNetworkCreation: true}
+
+func badDriverInit(reg driverapi.DriverCallback, opt map[string]interface{}) error {
+	return reg.RegisterDriver(badDriverName, &bd, driverapi.Capability{DataScope: datastore.LocalScope})
+}
+
+func (b *badDriver) CreateNetwork(nid string, options map[string]interface{}, nInfo driverapi.NetworkInfo, ipV4Data, ipV6Data []driverapi.IPAMData) error {
 	if b.failNetworkCreation {
 		return fmt.Errorf("I will not create any network")
 	}
@@ -467,4 +531,15 @@ func (b *badDriver) ProgramExternalConnectivity(nid, eid string, options map[str
 }
 func (b *badDriver) RevokeExternalConnectivity(nid, eid string) error {
 	return nil
+}
+
+func (b *badDriver) NetworkAllocate(id string, option map[string]string, ipV4Data, ipV6Data []driverapi.IPAMData) (map[string]string, error) {
+	return nil, types.NotImplementedErrorf("not implemented")
+}
+
+func (b *badDriver) NetworkFree(id string) error {
+	return types.NotImplementedErrorf("not implemented")
+}
+
+func (b *badDriver) EventNotify(etype driverapi.EventType, nid, tableName, key string, value []byte) {
 }

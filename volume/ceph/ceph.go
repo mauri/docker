@@ -6,11 +6,12 @@ import (
 
 	"bytes"
 	"fmt"
-	"github.com/Sirupsen/logrus"
-	"github.com/docker/docker/volume"
 	"os/exec"
 	"strconv"
 	"strings"
+
+	"github.com/Sirupsen/logrus"
+	"github.com/docker/docker/volume"
 )
 
 const CephImageSizeMB = 1024 * 1024 // 1TB
@@ -68,6 +69,10 @@ func (r *Root) List() ([]volume.Volume, error) {
 	}
 	r.m.Unlock()
 	return ls, nil
+}
+
+func (r *Root) Scope() string {
+	return volume.LocalScope
 }
 
 func mapCephVolume(name string) (string, error) {
@@ -131,7 +136,7 @@ func (v *Volume) Path() string {
 	return ""
 }
 
-func (v *Volume) Mount() (mappedDevicePath string, returnedError error) {
+func (v *Volume) Mount(id string) (mappedDevicePath string, returnedError error) {
 	v.m.Lock()
 	defer v.m.Unlock()
 	logrus.Debugf("Mount: %s", mappedDevicePath)
@@ -175,7 +180,7 @@ func (v *Volume) Mount() (mappedDevicePath string, returnedError error) {
 	return v.mappedDevicePath, nil
 }
 
-func (v *Volume) Unmount() error {
+func (v *Volume) Unmount(id string) error {
 	v.m.Lock()
 	defer v.m.Unlock()
 
@@ -183,9 +188,13 @@ func (v *Volume) Unmount() error {
 		return err
 	}
 	//if v.usedCount == 0 { // Even if the volume is attempted to be used multiple times, only the first use will actually succeed in mapping it
-		unmapCephVolume(v.name, v.mappedDevicePath)
+	unmapCephVolume(v.name, v.mappedDevicePath)
 	//}
 
+	return nil
+}
+
+func (v *Volume) Status() map[string]interface{} {
 	return nil
 }
 

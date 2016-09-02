@@ -46,7 +46,7 @@ func setupPlugin(t *testing.T, name string, mux *http.ServeMux) func() {
 
 	server := httptest.NewServer(mux)
 	if server == nil {
-		t.Fatal("Failed to start a HTTP Server")
+		t.Fatal("Failed to start an HTTP Server")
 	}
 
 	if err := ioutil.WriteFile(fmt.Sprintf("/etc/docker/plugins/%s.spec", name), []byte(server.URL), 0644); err != nil {
@@ -197,6 +197,10 @@ func (test *testEndpoint) AddStaticRoute(destination *net.IPNet, routeType int, 
 
 func (test *testEndpoint) DisableGatewayService() {
 	test.disableGatewayService = true
+}
+
+func (test *testEndpoint) AddTableEntry(tableName string, key string, value []byte) error {
+	return nil
 }
 
 func TestGetEmptyCapabilities(t *testing.T) {
@@ -400,7 +404,7 @@ func TestRemoteDriver(t *testing.T) {
 	}
 
 	netID := "dummy-network"
-	err = d.CreateNetwork(netID, map[string]interface{}{}, nil, nil)
+	err = d.CreateNetwork(netID, map[string]interface{}{}, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

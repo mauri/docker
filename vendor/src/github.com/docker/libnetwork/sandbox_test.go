@@ -10,11 +10,7 @@ import (
 	"github.com/docker/libnetwork/testutils"
 )
 
-func createEmptyCtrlr() *controller {
-	return &controller{sandboxes: sandboxTable{}}
-}
-
-func getTestEnv(t *testing.T) (NetworkController, Network, Network) {
+func getTestEnv(t *testing.T, empty bool) (NetworkController, Network, Network) {
 	netType := "bridge"
 
 	option := options.Generic{
@@ -32,13 +28,17 @@ func getTestEnv(t *testing.T) (NetworkController, Network, Network) {
 		t.Fatal(err)
 	}
 
+	if empty {
+		return c, nil, nil
+	}
+
 	name1 := "test_nw_1"
 	netOption1 := options.Generic{
 		netlabel.GenericData: options.Generic{
 			"BridgeName": name1,
 		},
 	}
-	n1, err := c.NewNetwork(netType, name1, NetworkOptionGeneric(netOption1))
+	n1, err := c.NewNetwork(netType, name1, "", NetworkOptionGeneric(netOption1))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func getTestEnv(t *testing.T) (NetworkController, Network, Network) {
 			"BridgeName": name2,
 		},
 	}
-	n2, err := c.NewNetwork(netType, name2, NetworkOptionGeneric(netOption2))
+	n2, err := c.NewNetwork(netType, name2, "", NetworkOptionGeneric(netOption2))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +58,8 @@ func getTestEnv(t *testing.T) (NetworkController, Network, Network) {
 }
 
 func TestSandboxAddEmpty(t *testing.T) {
-	ctrlr := createEmptyCtrlr()
+	c, _, _ := getTestEnv(t, true)
+	ctrlr := c.(*controller)
 
 	sbx, err := ctrlr.NewSandbox("sandbox0")
 	if err != nil {
@@ -81,7 +82,7 @@ func TestSandboxAddMultiPrio(t *testing.T) {
 		defer testutils.SetupTestOSContext(t)()
 	}
 
-	c, nw, _ := getTestEnv(t)
+	c, nw, _ := getTestEnv(t, false)
 	ctrlr := c.(*controller)
 
 	sbx, err := ctrlr.NewSandbox("sandbox1")
@@ -162,7 +163,7 @@ func TestSandboxAddSamePrio(t *testing.T) {
 		defer testutils.SetupTestOSContext(t)()
 	}
 
-	c, nw1, nw2 := getTestEnv(t)
+	c, nw1, nw2 := getTestEnv(t, false)
 
 	ctrlr := c.(*controller)
 

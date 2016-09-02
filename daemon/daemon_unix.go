@@ -675,7 +675,7 @@ func (daemon *Daemon) initNetworkController(config *Config, activeSandboxes map[
 }
 
 func initRoutedDriver(controller libnetwork.NetworkController, config *Config) error {
-	if _, err := controller.NewNetwork("routed", "routed", libnetwork.NetworkOptionPersist(false)); err != nil {
+	if _, err := controller.NewNetwork("routed", "routed", "", libnetwork.NetworkOptionPersist(false)); err != nil {
 		return fmt.Errorf("Error creating default \"routed\" network: %v", err)
 	}
 	return nil

@@ -67,7 +67,8 @@ clone git github.com/imdario/mergo 0.2.1
 #get libnetwork packages
 # Pointing to our patches of libnetwork
 # clone git github.com/docker/libnetwork 9876affaed02879b20a954b9fc9c75b32e513308 https://github.com/medallia/libnetwork.git
-clone git github.com/docker/libnetwork 82fb373e3eaa4e9bbb5b5ac148b0a3a71f80fca6
+#clone git github.com/docker/libnetwork 82fb373e3eaa4e9bbb5b5ac148b0a3a71f80fca6
+clone git github.com/docker/libnetwork e35d732a2045980a30bae8dde1255f57d4b0aabe https://github.com/medallia/libnetwork.git
 clone git github.com/docker/go-events afb2b9f2c23f33ada1a22b03651775fdc65a5089
 clone git github.com/armon/go-radix e39d623f12e8e41c7b5529e9a9dd67a1e2261f80
 clone git github.com/armon/go-metrics eb0af217e5e9747e41dd5303755356b62d28e3ec
@@ -108,7 +109,8 @@ clone git github.com/agl/ed25519 d2b94fd789ea21d12fac1a4443dd3a3f79cda72c
 # Pointing to our patches of runc
 ## clone git github.com/opencontainers/runc 908bd425e51c485cd13aa1af4478f6d52c9766f5 https://github.com/medallia/runc.git
 ## clone git github.com/opencontainers/specs f955d90e70a98ddfb886bd930ffd076da9b67998 # specs
-clone git github.com/opencontainers/runc cc29e3dded8e27ba8f65738f40d251c885030a28 # libcontainer
+#clone git github.com/opencontainers/runc cc29e3dded8e27ba8f65738f40d251c885030a28 # libcontainer
+clone git github.com/opencontainers/runc 1d2c6d23c112c427694b180d73114a447daa0175 https://github.com/medallia/runc.git
 clone git github.com/opencontainers/specs v1.0.0-rc1 # specs
 clone git github.com/seccomp/libseccomp-golang 1b506fc7c24eec5a3693cdcbed40d9c226cfc6a1
 clone git github.com/seccomp/libseccomp-golang 32f571b70023028bd57d9288c20efbcb237f3ce0

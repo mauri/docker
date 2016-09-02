@@ -52,8 +52,6 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
-	//libnetwork.SetTestDataStore(controller, datastore.NewCustomDataStore(datastore.NewMockStore()))
-
 	x := m.Run()
 	controller.Stop()
 	os.Exit(x)
@@ -85,7 +83,7 @@ func createController() error {
 }
 
 func createTestNetwork(networkType, networkName string, netOption options.Generic, ipamV4Configs, ipamV6Configs []*libnetwork.IpamConf) (libnetwork.Network, error) {
-	return controller.NewNetwork(networkType, networkName,
+	return controller.NewNetwork(networkType, networkName, "",
 		libnetwork.NetworkOptionGeneric(netOption),
 		libnetwork.NetworkOptionIpam(ipamapi.DefaultIPAM, "", ipamV4Configs, ipamV6Configs, nil))
 }
@@ -333,7 +331,7 @@ func TestBridgeIpv6FromMac(t *testing.T) {
 	ipamV4ConfList := []*libnetwork.IpamConf{{PreferredPool: "192.168.100.0/24", Gateway: "192.168.100.1"}}
 	ipamV6ConfList := []*libnetwork.IpamConf{{PreferredPool: "fe90::/64", Gateway: "fe90::22"}}
 
-	network, err := controller.NewNetwork(bridgeNetType, "testipv6mac",
+	network, err := controller.NewNetwork(bridgeNetType, "testipv6mac", "",
 		libnetwork.NetworkOptionGeneric(netOption),
 		libnetwork.NetworkOptionEnableIPv6(true),
 		libnetwork.NetworkOptionIpam(ipamapi.DefaultIPAM, "", ipamV4ConfList, ipamV6ConfList, nil),
@@ -386,7 +384,7 @@ func TestUnknownDriver(t *testing.T) {
 }
 
 func TestNilRemoteDriver(t *testing.T) {
-	_, err := controller.NewNetwork("framerelay", "dummy",
+	_, err := controller.NewNetwork("framerelay", "dummy", "",
 		libnetwork.NetworkOptionGeneric(getEmptyGenericOption()))
 	if err == nil {
 		t.Fatal("Expected to fail. But instead succeeded")
@@ -969,34 +967,24 @@ func TestNetworkQuery(t *testing.T) {
 const containerID = "valid_c"
 
 func checkSandbox(t *testing.T, info libnetwork.EndpointInfo) {
-	origns, err := netns.Get()
-	if err != nil {
-		t.Fatalf("Could not get the current netns: %v", err)
-	}
-	defer origns.Close()
-
 	key := info.Sandbox().Key()
-	f, err := os.OpenFile(key, os.O_RDONLY, 0)
+	sbNs, err := netns.GetFromPath(key)
 	if err != nil {
-		t.Fatalf("Failed to open network namespace path %q: %v", key, err)
+		t.Fatalf("Failed to get network namespace path %q: %v", key, err)
 	}
-	defer f.Close()
+	defer sbNs.Close()
 
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-
-	nsFD := f.Fd()
-	if err = netns.Set(netns.NsHandle(nsFD)); err != nil {
-		t.Fatalf("Setting to the namespace pointed to by the sandbox %s failed: %v", key, err)
+	nh, err := netlink.NewHandleAt(sbNs)
+	if err != nil {
+		t.Fatal(err)
 	}
-	defer netns.Set(origns)
 
-	_, err = netlink.LinkByName("eth0")
+	_, err = nh.LinkByName("eth0")
 	if err != nil {
 		t.Fatalf("Could not find the interface eth0 inside the sandbox: %v", err)
 	}
 
-	_, err = netlink.LinkByName("eth1")
+	_, err = nh.LinkByName("eth1")
 	if err != nil {
 		t.Fatalf("Could not find the interface eth1 inside the sandbox: %v", err)
 	}
@@ -1016,7 +1004,7 @@ func TestEndpointJoin(t *testing.T) {
 		},
 	}
 	ipamV6ConfList := []*libnetwork.IpamConf{{PreferredPool: "fe90::/64", Gateway: "fe90::22"}}
-	n1, err := controller.NewNetwork(bridgeNetType, "testnetwork1",
+	n1, err := controller.NewNetwork(bridgeNetType, "testnetwork1", "",
 		libnetwork.NetworkOptionGeneric(netOption),
 		libnetwork.NetworkOptionEnableIPv6(true),
 		libnetwork.NetworkOptionIpam(ipamapi.DefaultIPAM, "", nil, ipamV6ConfList, nil),
@@ -1093,13 +1081,11 @@ func TestEndpointJoin(t *testing.T) {
 	}()
 
 	err = ep1.Join(sb)
-	runtime.LockOSThread()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() {
 		err = ep1.Leave(sb)
-		runtime.LockOSThread()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1115,7 +1101,7 @@ func TestEndpointJoin(t *testing.T) {
 	}
 
 	if info.Sandbox() == nil {
-		t.Fatalf("Expected an non-empty sandbox key for a joined endpoint. Instead found a empty sandbox key")
+		t.Fatalf("Expected a non-empty sandbox key for a joined endpoint. Instead found an empty sandbox key")
 	}
 
 	// Check endpoint provided container information
@@ -1162,10 +1148,8 @@ func TestEndpointJoin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime.LockOSThread()
 	defer func() {
 		err = ep2.Leave(sb)
-		runtime.LockOSThread()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1222,6 +1206,10 @@ func (f *fakeSandbox) ResolveName(name string, ipType int) ([]net.IP, bool) {
 
 func (f *fakeSandbox) ResolveIP(ip string) string {
 	return ""
+}
+
+func (f *fakeSandbox) ResolveService(name string) ([]*net.SRV, []net.IP, error) {
+	return nil, nil, nil
 }
 
 func (f *fakeSandbox) Endpoints() []libnetwork.Endpoint {
@@ -1287,13 +1275,11 @@ func externalKeyTest(t *testing.T, reexec bool) {
 
 	// Join endpoint to sandbox before SetKey
 	err = ep.Join(cnt)
-	runtime.LockOSThread()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() {
 		err = ep.Leave(cnt)
-		runtime.LockOSThread()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1310,14 +1296,14 @@ func externalKeyTest(t *testing.T, reexec bool) {
 			t.Fatalf("SetExternalKey must fail if the corresponding namespace is not created")
 		}
 	} else {
-		// Setting an non-existing key (namespace) must fail
+		// Setting a non-existing key (namespace) must fail
 		if err := sbox.SetKey("this-must-fail"); err == nil {
 			t.Fatalf("Setkey must fail if the corresponding namespace is not created")
 		}
 	}
 
 	// Create a new OS sandbox using the osl API before using it in SetKey
-	if extOsBox, err := osl.NewSandbox("ValidKey", true); err != nil {
+	if extOsBox, err := osl.NewSandbox("ValidKey", true, false); err != nil {
 		t.Fatalf("Failed to create new osl sandbox")
 	} else {
 		defer func() {
@@ -1343,10 +1329,8 @@ func externalKeyTest(t *testing.T, reexec bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime.LockOSThread()
 	defer func() {
 		err = ep2.Leave(sbox)
-		runtime.LockOSThread()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1422,13 +1406,11 @@ func TestEndpointDeleteWithActiveContainer(t *testing.T) {
 	}()
 
 	err = ep.Join(cnt)
-	runtime.LockOSThread()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() {
 		err = ep.Leave(cnt)
-		runtime.LockOSThread()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1488,17 +1470,14 @@ func TestEndpointMultipleJoins(t *testing.T) {
 		if err := sbx2.Delete(); err != nil {
 			t.Fatal(err)
 		}
-		runtime.LockOSThread()
 	}()
 
 	err = ep.Join(sbx1)
-	runtime.LockOSThread()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() {
 		err = ep.Leave(sbx1)
-		runtime.LockOSThread()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1554,13 +1533,11 @@ func TestLeaveAll(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to join ep1: %v", err)
 	}
-	runtime.LockOSThread()
 
 	err = ep2.Join(cnt)
 	if err != nil {
 		t.Fatalf("Failed to join ep2: %v", err)
 	}
-	runtime.LockOSThread()
 
 	err = cnt.Delete()
 	if err != nil {
@@ -1691,13 +1668,11 @@ func TestEndpointUpdateParent(t *testing.T) {
 	}()
 
 	err = ep1.Join(sbx1)
-	runtime.LockOSThread()
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	err = ep2.Join(sbx2)
-	runtime.LockOSThread()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1920,7 +1895,6 @@ func TestResolvConf(t *testing.T) {
 	}()
 
 	err = ep.Join(sb1)
-	runtime.LockOSThread()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1946,7 +1920,6 @@ func TestResolvConf(t *testing.T) {
 	}
 
 	err = ep.Leave(sb1)
-	runtime.LockOSThread()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1966,7 +1939,6 @@ func TestResolvConf(t *testing.T) {
 	}()
 
 	err = ep.Join(sb2)
-	runtime.LockOSThread()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1985,13 +1957,11 @@ func TestResolvConf(t *testing.T) {
 	}
 
 	err = ep.Leave(sb2)
-	runtime.LockOSThread()
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	err = ep.Join(sb2)
-	runtime.LockOSThread()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2014,7 +1984,7 @@ func TestInvalidRemoteDriver(t *testing.T) {
 	mux := http.NewServeMux()
 	server := httptest.NewServer(mux)
 	if server == nil {
-		t.Fatal("Failed to start a HTTP Server")
+		t.Fatal("Failed to start an HTTP Server")
 	}
 	defer server.Close()
 
@@ -2046,7 +2016,7 @@ func TestInvalidRemoteDriver(t *testing.T) {
 	}
 	defer ctrlr.Stop()
 
-	_, err = ctrlr.NewNetwork("invalid-network-driver", "dummy",
+	_, err = ctrlr.NewNetwork("invalid-network-driver", "dummy", "",
 		libnetwork.NetworkOptionGeneric(getEmptyGenericOption()))
 	if err == nil {
 		t.Fatal("Expected to fail. But instead succeeded")
@@ -2065,7 +2035,7 @@ func TestValidRemoteDriver(t *testing.T) {
 	mux := http.NewServeMux()
 	server := httptest.NewServer(mux)
 	if server == nil {
-		t.Fatal("Failed to start a HTTP Server")
+		t.Fatal("Failed to start an HTTP Server")
 	}
 	defer server.Close()
 
@@ -2095,7 +2065,7 @@ func TestValidRemoteDriver(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	n, err := controller.NewNetwork("valid-network-driver", "dummy",
+	n, err := controller.NewNetwork("valid-network-driver", "dummy", "",
 		libnetwork.NetworkOptionGeneric(getEmptyGenericOption()))
 	if err != nil {
 		// Only fail if we could not find the plugin driver
@@ -2357,7 +2327,7 @@ func TestParallel3(t *testing.T) {
 }
 
 func TestNullIpam(t *testing.T) {
-	_, err := controller.NewNetwork(bridgeNetType, "testnetworkinternal", libnetwork.NetworkOptionIpam(ipamapi.NullIPAM, "", nil, nil, nil))
+	_, err := controller.NewNetwork(bridgeNetType, "testnetworkinternal", "", libnetwork.NetworkOptionIpam(ipamapi.NullIPAM, "", nil, nil, nil))
 	if err == nil || err.Error() != "ipv4 pool is empty" {
 		t.Fatal("bridge network should complain empty pool")
 	}

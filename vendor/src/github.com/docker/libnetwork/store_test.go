@@ -13,7 +13,7 @@ import (
 	"github.com/docker/libnetwork/options"
 )
 
-func TestZooKeeperBackend(t *testing.T) {
+func testZooKeeperBackend(t *testing.T) {
 	c, err := testNewController(t, "zk", "127.0.0.1:2181/custom_prefix")
 	if err != nil {
 		t.Fatal(err)
@@ -55,7 +55,7 @@ func testLocalBackend(t *testing.T, provider, url string, storeConfig *store.Con
 	if err != nil {
 		t.Fatalf("Error new controller: %v", err)
 	}
-	nw, err := ctrl.NewNetwork("host", "host")
+	nw, err := ctrl.NewNetwork("host", "host", "")
 	if err != nil {
 		t.Fatalf("Error creating default \"host\" network: %v", err)
 	}
@@ -91,7 +91,7 @@ func TestNoPersist(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error new controller: %v", err)
 	}
-	nw, err := ctrl.NewNetwork("host", "host", NetworkOptionPersist(false))
+	nw, err := ctrl.NewNetwork("host", "host", "", NetworkOptionPersist(false))
 	if err != nil {
 		t.Fatalf("Error creating default \"host\" network: %v", err)
 	}
