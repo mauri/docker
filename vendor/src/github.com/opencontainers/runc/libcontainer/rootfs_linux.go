@@ -224,13 +224,14 @@ func mountToRootfs(m *configs.Mount, rootfs, mountLabel string) error {
 			// retry=0,timeo=30: Fail if NFS server can't be reached in three second (no retries) - aggressive, but necessary because the Docker daemon becomes unresponsive if the mount command hangs.
 			// nolock:           Don't use NFS locking, because the host's rpc.statd can't be reached at this point since we're already inside the network namespace.
 			//                   This won't let us use fcntl, but that's on par with today's system, since our current NFS server doesn't support locking.
-			args = append(args, "-o", "retry=0,timeo=30,nolock")
+			args = append(args, "-o", "retry=0,timeo=100,nolock")
 		}
 		if m.Device == "ceph" {
 			args = append(args, "-o", "discard")
 		}
 		// Using the mount command rather than the mount syscall because for NFS mounts, the syscall requires us to figure out our own IP address
-		cmd := exec.Command("mount", modeFlag, m.Source, dest)
+		//cmd := exec.Command("mount", modeFlag, m.Source, dest)
+		cmd := exec.Command("mount", args...)
 		var out bytes.Buffer
 		cmd.Stderr = &out
 		if err := cmd.Run(); err != nil {

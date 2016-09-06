@@ -110,7 +110,7 @@ clone git github.com/agl/ed25519 d2b94fd789ea21d12fac1a4443dd3a3f79cda72c
 ## clone git github.com/opencontainers/runc 908bd425e51c485cd13aa1af4478f6d52c9766f5 https://github.com/medallia/runc.git
 ## clone git github.com/opencontainers/specs f955d90e70a98ddfb886bd930ffd076da9b67998 # specs
 #clone git github.com/opencontainers/runc cc29e3dded8e27ba8f65738f40d251c885030a28 # libcontainer
-clone git github.com/opencontainers/runc 1d2c6d23c112c427694b180d73114a447daa0175 https://github.com/medallia/runc.git
+clone git github.com/opencontainers/runc d7c236b1b3aa2d8f164fcd01b19c9e28d67dff26 https://github.com/medallia/runc.git
 clone git github.com/opencontainers/specs v1.0.0-rc1 # specs
 clone git github.com/seccomp/libseccomp-golang 1b506fc7c24eec5a3693cdcbed40d9c226cfc6a1
 clone git github.com/seccomp/libseccomp-golang 32f571b70023028bd57d9288c20efbcb237f3ce0
