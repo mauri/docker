@@ -85,6 +85,7 @@ func (l *linuxStandardInit) Init() error {
 			return err
 		}
 	}
+
 	if hostname := l.config.Config.Hostname; hostname != "" {
 		if err := syscall.Sethostname([]byte(hostname)); err != nil {
 			return err
@@ -121,6 +122,7 @@ func (l *linuxStandardInit) Init() error {
 			return err
 		}
 	}
+
 	// Tell our parent that we're ready to Execv. This must be done before the
 	// Seccomp rules have been applied, because we need to be able to read and
 	// write to a socket.
@@ -138,6 +140,7 @@ func (l *linuxStandardInit) Init() error {
 	if err := finalizeNamespace(l.config); err != nil {
 		return err
 	}
+
 	// finalizeNamespace can change user/group which clears the parent death
 	// signal, so we restore it here.
 	if err := pdeath.Restore(); err != nil {
@@ -155,6 +158,7 @@ func (l *linuxStandardInit) Init() error {
 	if err != nil {
 		return err
 	}
+
 	// close the pipe to signal that we have completed our init.
 	l.pipe.Close()
 	// wait for the fifo to be opened on the other side before

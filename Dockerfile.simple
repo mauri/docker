@@ -57,7 +57,7 @@ ENV GOPATH /go:/go/src/github.com/docker/docker/vendor
 ENV CGO_LDFLAGS -L/lib
 
 # Install runc
-ENV RUNC_COMMIT 908bd425e51c485cd13aa1af4478f6d52c9766f5
+ENV RUNC_COMMIT 5e664e21ce9922d2d655fcc295dc3b4607982683
 RUN set -x \
 	&& export GOPATH="$(mktemp -d)" \
 	&& git clone https://github.com/medallia/runc.git "$GOPATH/src/github.com/opencontainers/runc" \

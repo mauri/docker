@@ -71,6 +71,7 @@ func setupRootfs(config *configs.Config, console *linuxConsole, pipe io.ReadWrit
 			return newSystemErrorWithCause(err, "setting up /dev symlinks")
 		}
 	}
+
 	// Signal the parent to run the pre-start hooks.
 	// The hooks are run after the mounts are setup, but before we switch to the new
 	// root, so that the old root is still available in the hooks for any mount
@@ -78,6 +79,14 @@ func setupRootfs(config *configs.Config, console *linuxConsole, pipe io.ReadWrit
 	if err := syncParentHooks(pipe); err != nil {
 		return err
 	}
+
+	// only after this point network devices are set up
+	for _, m := range config.Mounts {
+		if err := mountToRootfsWithNetwork(m, config.Rootfs, config.MountLabel); err != nil {
+			return newSystemErrorWithCausef(err, "mounting %q to rootfs %q", m.Destination, config.Rootfs)
+		}
+	}
+
 	if err := syscall.Chdir(config.Rootfs); err != nil {
 		return newSystemErrorWithCausef(err, "changing dir to %q", config.Rootfs)
 	}
@@ -212,35 +221,10 @@ func mountToRootfs(m *configs.Mount, rootfs, mountLabel string) error {
 			}
 		}
 	case "ceph", "nfs":
+		// the volume will be actually mounted later on, when network is available
 		if err := createIfNotExists(dest, true); err != nil {
 			return err
 		}
-		modeFlag := "--rw"
-		if m.Flags&syscall.MS_RDONLY != 0 {
-			modeFlag = "--read-only"
-		}
-		args := []string{m.Source, dest, modeFlag}
-		if m.Device == "nfs" {
-			// retry=0,timeo=30: Fail if NFS server can't be reached in three second (no retries) - aggressive, but necessary because the Docker daemon becomes unresponsive if the mount command hangs.
-			// nolock:           Don't use NFS locking, because the host's rpc.statd can't be reached at this point since we're already inside the network namespace.
-			//                   This won't let us use fcntl, but that's on par with today's system, since our current NFS server doesn't support locking.
-			args = append(args, "-o", "retry=0,timeo=100,nolock")
-		}
-		if m.Device == "ceph" {
-			args = append(args, "-o", "discard")
-		}
-		// Using the mount command rather than the mount syscall because for NFS mounts, the syscall requires us to figure out our own IP address
-		//cmd := exec.Command("mount", modeFlag, m.Source, dest)
-		cmd := exec.Command("mount", args...)
-		var out bytes.Buffer
-		cmd.Stderr = &out
-		if err := cmd.Run(); err != nil {
-			e := fmt.Errorf("Failed to mount %s device %s to %s with mode flag %s: %s - %s", m.Device, m.Source, dest, modeFlag, err, strings.TrimRight(out.String(), "\n"))
-			fmt.Fprintf(os.Stderr, "%s\n", e)
-			return e
-		}
-		fmt.Fprintf(os.Stderr, "Succeeded in mounting %s device %s to %s with mode flag %s\n", m.Device, m.Source, dest, modeFlag)
-		//TODO: The bind mount does a remount here for readonly mounts - why?
 	case "cgroup":
 		binds, err := getCgroupMounts(m)
 		if err != nil {
@@ -309,6 +293,48 @@ func mountToRootfs(m *configs.Mount, rootfs, mountLabel string) error {
 			return err
 		}
 		return mountPropagate(m, rootfs, mountLabel)
+	}
+	return nil
+}
+
+func mountToRootfsWithNetwork(m *configs.Mount, rootfs, mountLabel string) error {
+	var (
+		dest = m.Destination
+	)
+	if !strings.HasPrefix(dest, rootfs) {
+		dest = filepath.Join(rootfs, dest)
+	}
+
+	switch m.Device {
+	case "ceph", "nfs":
+
+		if err := createIfNotExists(dest, true); err != nil {
+			return err
+		}
+
+		modeFlag := "--rw"
+		if m.Flags&syscall.MS_RDONLY != 0 {
+			modeFlag = "--read-only"
+		}
+		args := []string{m.Source, dest, modeFlag}
+		if m.Device == "nfs" {
+			// retry=0,timeo=30: Fail if NFS server can't be reached in three second (no retries) - aggressive, but necessary because the Docker daemon becomes unresponsive if the mount command hangs.
+			// nolock:           Don't use NFS locking, because the host's rpc.statd can't be reached at this point since we're already inside the network namespace.
+			//                   This won't let us use fcntl, but that's on par with today's system, since our current NFS server doesn't support locking.
+			args = append(args, "-o", "retry=0,timeo=100,nolock")
+		}
+		if m.Device == "ceph" {
+			args = append(args, "-o", "discard")
+		}
+		// Using the mount command rather than the mount syscall because for NFS mounts, the syscall requires us to figure out our own IP address
+		cmd := exec.Command("mount", args...)
+		var stderr bytes.Buffer
+		cmd.Stderr = &stderr
+		if err := cmd.Run(); err != nil {
+			e := fmt.Errorf("Failed to mount %s device %s to %s with mode flag %s: %s - %s", m.Device, m.Source, dest, modeFlag, err, strings.TrimRight(stderr.String(), "\n"))
+			fmt.Fprintf(os.Stderr, "%s\n", e)
+			return e
+		}
 	}
 	return nil
 }
