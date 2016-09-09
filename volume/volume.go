@@ -132,6 +132,11 @@ func (m *MountPoint) Setup(mountLabel string) (string, error) {
 	return m.Source, nil
 }
 
+// mount types
+var mountTypes = map[string]bool{
+	"nfs": true,
+	"ceph": true,
+}
 // Path returns the path of a volume in a mount point.
 func (m *MountPoint) Path() string {
 	if m.Volume != nil {
@@ -183,6 +188,26 @@ func ParseVolumesFrom(spec string) (string, string, error) {
 
 func errInvalidMode(mode string) error {
 	return fmt.Errorf("invalid mode: %v", mode)
+}
+
+// ValidMountTypeAndMode checks if the type and mode is valid or not.
+// Valid type and mode is a join between a type (ceph, nfs) and a mode.
+func ValidMountTypeAndMode(typeAndMode string) bool {
+	var types = 0
+	var modes = 0
+	var z = 0
+	for _, item := range strings.Split(typeAndMode, ",") {
+		if item == "rw" || item == "ro" {
+			modes++
+		} else if mountTypes[item] {
+			types++
+		} else if strings.ToLower(item) == "z" {
+			z++
+		} else {
+			return false
+		}
+	}
+	return modes <= 1 && types <= 1 && z <= 1
 }
 
 func errInvalidSpec(spec string) error {
