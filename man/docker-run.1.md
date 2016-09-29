@@ -54,6 +54,7 @@ docker-run - Run a command in a new container
 [**--memory-swap**[=*LIMIT*]]
 [**--memory-swappiness**[=*MEMORY-SWAPPINESS*]]
 [**--name**[=*NAME*]]
+[**--net-opt**[=*[]*]]
 [**--network-alias**[=*[]*]]
 [**--network**[=*"bridge"*]]
 [**--oom-kill-disable**]
@@ -386,6 +387,10 @@ to the container with **--name** then the daemon will also generate a random
 string name. The name is useful when defining links (see **--link**) (or any
 other place you need to identify a container). This works for both background
 and foreground Docker containers.
+
+**--net-opt**=[]
+  Network driver specific options.
+
 
 **--net**="*bridge*"
    Set the Network mode for the container
