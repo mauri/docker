@@ -37,6 +37,7 @@ type ContainerOptions struct {
 	flDeviceWriteIOps   ThrottledeviceOpt
 	flEnv               opts.ListOpts
 	flLabels            opts.ListOpts
+	flNetOpts           opts.ListOpts
 	flDevices           opts.ListOpts
 	flUlimits           *UlimitOpt
 	flSysctls           *opts.MapOpts
@@ -134,6 +135,7 @@ func AddFlags(flags *pflag.FlagSet) *ContainerOptions {
 		flLinkLocalIPs:      opts.NewListOpts(nil),
 		flLinks:             opts.NewListOpts(ValidateLink),
 		flLoggingOpts:       opts.NewListOpts(nil),
+		flNetOpts:           opts.NewListOpts(nil),
 		flPublish:           opts.NewListOpts(nil),
 		flSecurityOpt:       opts.NewListOpts(nil),
 		flStorageOpt:        opts.NewListOpts(nil),
@@ -192,6 +194,8 @@ func AddFlags(flags *pflag.FlagSet) *ContainerOptions {
 	flags.Var(&copts.flAliases, "net-alias", "Add network-scoped alias for the container")
 	flags.Var(&copts.flAliases, "network-alias", "Add network-scoped alias for the container")
 	flags.MarkHidden("net-alias")
+	// network specific options
+	flags.Var(&copts.flNetOpts, "net-opt", "Set network configuration option on a container")
 
 	// Logging and storage
 	flags.StringVar(&copts.flLoggingDriver, "log-driver", "", "Logging driver for the container")
@@ -627,6 +631,15 @@ func Parse(flags *pflag.FlagSet, copts *ContainerOptions) (*container.Config, *c
 		}
 		epConfig.Aliases = make([]string, copts.flAliases.Len())
 		copy(epConfig.Aliases, copts.flAliases.GetAll())
+		networkingConfig.EndpointsConfig[string(hostConfig.NetworkMode)] = epConfig
+	}
+
+	if copts.flNetOpts.Len() > 0 {
+		epConfig := networkingConfig.EndpointsConfig[string(hostConfig.NetworkMode)]
+		if epConfig == nil {
+			epConfig = &networktypes.EndpointSettings{}
+		}
+		epConfig.NetOpts = ConvertKVStringsToMap(copts.flNetOpts.GetAll())
 		networkingConfig.EndpointsConfig[string(hostConfig.NetworkMode)] = epConfig
 	}
 
