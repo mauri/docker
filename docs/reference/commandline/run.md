@@ -78,6 +78,7 @@ Options:
       --memory-swap string          Swap limit equal to memory plus swap: '-1' to enable unlimited swap
       --memory-swappiness int       Tune container memory swappiness (0 to 100) (default -1).
       --name string                 Assign a name to the container
+      --net-opt value               Network driver options (default [])
       --network-alias value         Add network-scoped alias for the container (default [])
       --network string              Connect a container to a network
                                     'bridge': create a network stack on the default Docker bridge

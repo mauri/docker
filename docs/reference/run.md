@@ -301,6 +301,7 @@ of the containers.
     --ip=""            : Sets the container's Ethernet device's IPv4 address
     --ip6=""           : Sets the container's Ethernet device's IPv6 address
     --link-local-ip=[] : Sets one or more container's Ethernet device's link local IPv4/IPv6 addresses
+    --net-opt=[] : Sets one or more option for the network driver
 
 By default, all containers have networking enabled and they can make any
 outgoing connections. The operator can completely disable networking
