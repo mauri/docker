@@ -813,6 +813,13 @@ func (container *Container) BuildCreateEndpointOptions(n libnetwork.Network, epC
 		for _, alias := range epConfig.Aliases {
 			createOptions = append(createOptions, libnetwork.CreateOptionMyAlias(alias))
 		}
+
+		// Passing network options to driver on EndpointCreate
+		for key, val := range epConfig.NetOpts {
+			genericOption := options.Generic{}
+			genericOption[key] = val
+			createOptions = append(createOptions, libnetwork.EndpointOptionGeneric(genericOption))
+		}
 	}
 
 	if container.NetworkSettings.Service != nil {

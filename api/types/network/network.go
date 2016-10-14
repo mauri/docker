@@ -44,6 +44,8 @@ type EndpointSettings struct {
 	GlobalIPv6Address   string
 	GlobalIPv6PrefixLen int
 	MacAddress          string
+	// List of network options set to this container
+	NetOpts             map[string]string
 }
 
 // NetworkingConfig represents the container's networking configuration for each of its interfaces

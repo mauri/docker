@@ -54,6 +54,7 @@ type ContainerOptions struct {
 	storageOpt        opts.ListOpts
 	labelsFile        opts.ListOpts
 	loggingOpts       opts.ListOpts
+	netOpts           opts.ListOpts
 	privileged        bool
 	pidMode           string
 	utsMode           string
@@ -136,6 +137,7 @@ func AddFlags(flags *pflag.FlagSet) *ContainerOptions {
 		linkLocalIPs:      opts.NewListOpts(nil),
 		links:             opts.NewListOpts(ValidateLink),
 		loggingOpts:       opts.NewListOpts(nil),
+		netOpts:	   opts.NewListOpts(nil),
 		publish:           opts.NewListOpts(nil),
 		securityOpt:       opts.NewListOpts(nil),
 		storageOpt:        opts.NewListOpts(nil),
@@ -195,6 +197,8 @@ func AddFlags(flags *pflag.FlagSet) *ContainerOptions {
 	flags.Var(&copts.aliases, "net-alias", "Add network-scoped alias for the container")
 	flags.Var(&copts.aliases, "network-alias", "Add network-scoped alias for the container")
 	flags.MarkHidden("net-alias")
+        // Network driver specific options
+        flags.Var(&copts.netOpts, "net-opt", "Set network configuration option on a container")
 
 	// Logging and storage
 	flags.StringVar(&copts.loggingDriver, "log-driver", "", "Logging driver for the container")
@@ -644,6 +648,16 @@ func Parse(flags *pflag.FlagSet, copts *ContainerOptions) (*container.Config, *c
 		}
 		epConfig.Aliases = make([]string, copts.aliases.Len())
 		copy(epConfig.Aliases, copts.aliases.GetAll())
+		networkingConfig.EndpointsConfig[string(hostConfig.NetworkMode)] = epConfig
+	}
+
+
+	if copts.netOpts.Len() > 0 {
+		epConfig := networkingConfig.EndpointsConfig[string(hostConfig.NetworkMode)]
+		if epConfig == nil {
+			epConfig = &networktypes.EndpointSettings{}
+		}
+		epConfig.NetOpts = ConvertKVStringsToMap(copts.netOpts.GetAll())
 		networkingConfig.EndpointsConfig[string(hostConfig.NetworkMode)] = epConfig
 	}
 
