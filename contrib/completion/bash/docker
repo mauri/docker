@@ -2371,7 +2371,7 @@ _docker_run() {
 		--memory-swappiness
 		--memory-reservation
 		--name
-        --net-opt
+        	--net-opt
 		--network
 		--network-alias
 		--oom-score-adj
