@@ -197,8 +197,8 @@ func AddFlags(flags *pflag.FlagSet) *ContainerOptions {
 	flags.Var(&copts.aliases, "net-alias", "Add network-scoped alias for the container")
 	flags.Var(&copts.aliases, "network-alias", "Add network-scoped alias for the container")
 	flags.MarkHidden("net-alias")
-        // Network driver specific options
-        flags.Var(&copts.netOpts, "net-opt", "Set network configuration option on a container")
+	// Network driver specific options
+	flags.Var(&copts.netOpts, "net-opt", "Set network configuration option on a container")
 
 	// Logging and storage
 	flags.StringVar(&copts.loggingDriver, "log-driver", "", "Logging driver for the container")
