@@ -603,59 +603,13 @@ func (sb *sandbox) buildHostsFile() error {
 }
 
 func (sb *sandbox) updateHostsFile(ifaceIP string, svcRecords []etchosts.Record) error {
-	var err error
-
-	if sb.config.originHostsPath != "" {
-		return nil
-	}
-
-	max := func(a, b int) int {
-		if a < b {
-			return b
-		}
-
-		return a
-	}
-
-	extraContent := make([]etchosts.Record, 0,
-		max(len(sb.config.extraHosts), len(svcRecords)))
-
-	sb.hostsOnce.Do(func() {
-		// Rebuild the hosts file accounting for the passed
-		// interface IP and service records
-
-		for _, extraHost := range sb.config.extraHosts {
-			extraContent = append(extraContent,
-				etchosts.Record{Hosts: extraHost.name, IP: extraHost.IP})
-		}
-
-		err = etchosts.Build(sb.config.hostsPath, ifaceIP,
-			sb.config.hostName, sb.config.domainName, extraContent)
-	})
-
-	if err != nil {
-		return err
-	}
-
-	extraContent = extraContent[:0]
-	for _, svc := range svcRecords {
-		extraContent = append(extraContent, svc)
-	}
-
-	sb.addHostsEntries(extraContent)
 	return nil
 }
 
 func (sb *sandbox) addHostsEntries(recs []etchosts.Record) {
-	if err := etchosts.Add(sb.config.hostsPath, recs); err != nil {
-		log.Warnf("Failed adding service host entries to the running container: %v", err)
-	}
 }
 
 func (sb *sandbox) deleteHostsEntries(recs []etchosts.Record) {
-	if err := etchosts.Delete(sb.config.hostsPath, recs); err != nil {
-		log.Warnf("Failed deleting service host entries to the running container: %v", err)
-	}
 }
 
 func (sb *sandbox) updateParentHosts() error {
