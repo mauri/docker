@@ -242,10 +242,10 @@ RUN set -x \
 	&& rm -rf "$GOPATH"
 
 # Install runc
-ENV RUNC_COMMIT f59ba3cdd76fdc08c004f42aa915996f6f420899
+ENV RUNC_COMMIT medallia-1.12.3
 RUN set -x \
 	&& export GOPATH="$(mktemp -d)" \
-	&& git clone https://github.com/docker/runc.git "$GOPATH/src/github.com/opencontainers/runc" \
+	&& git clone git://github.com/medallia/runc.git "$GOPATH/src/github.com/opencontainers/runc" \
 	&& cd "$GOPATH/src/github.com/opencontainers/runc" \
 	&& git checkout -q "$RUNC_COMMIT" \
 	&& make static BUILDTAGS="seccomp apparmor selinux" \

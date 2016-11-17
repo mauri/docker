@@ -215,6 +215,8 @@ func (s *VolumeStore) list() ([]volume.Volume, []string, error) {
 // This is just like Create() except we store the reference while holding the lock.
 // This ensures there's no race between creating a volume and then storing a reference.
 func (s *VolumeStore) CreateWithRef(name, driverName, ref string, opts, labels map[string]string) (volume.Volume, error) {
+	logrus.Debugf("VolumeStore##CreateWithRef %s - %s - %s - %s", name, driverName, opts, labels)
+
 	name = normaliseVolumeName(name)
 	s.locks.Lock(name)
 	defer s.locks.Unlock(name)
@@ -230,6 +232,7 @@ func (s *VolumeStore) CreateWithRef(name, driverName, ref string, opts, labels m
 
 // Create creates a volume with the given name and driver.
 func (s *VolumeStore) Create(name, driverName string, opts, labels map[string]string) (volume.Volume, error) {
+	logrus.Debugf("VolumeStore##Create %s - %s - %s - %s", name, driverName, opts, labels)
 	name = normaliseVolumeName(name)
 	s.locks.Lock(name)
 	defer s.locks.Unlock(name)
@@ -247,6 +250,7 @@ func (s *VolumeStore) Create(name, driverName string, opts, labels map[string]st
 // If the passed in driver name does not match the driver name which is stored for the given volume name, an error is returned.
 // It is expected that callers of this function hold any necessary locks.
 func (s *VolumeStore) create(name, driverName string, opts, labels map[string]string) (volume.Volume, error) {
+	logrus.Debugf("VolumeStore##create %s - %s - %s - %s", name, driverName, opts, labels)
 	// Validate the name in a platform-specific manner
 	valid, err := volume.IsVolumeNameValid(name)
 	if err != nil {
@@ -384,6 +388,7 @@ func (s *VolumeStore) getVolume(name string) (volume.Volume, error) {
 	s.globalLock.Lock()
 	v, exists := s.names[name]
 	s.globalLock.Unlock()
+	logrus.Debugf(">> %+v", v)
 	if exists {
 		vd, err := volumedrivers.GetDriver(v.DriverName())
 		if err != nil {
@@ -403,6 +408,7 @@ func (s *VolumeStore) getVolume(name string) (volume.Volume, error) {
 	}
 
 	for _, d := range drivers {
+		
 		v, err := d.Get(name)
 		if err != nil {
 			continue

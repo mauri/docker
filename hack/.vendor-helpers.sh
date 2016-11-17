@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 
 PROJECT=github.com/docker/docker
-
+MEDALLIA_RUNC_VERSION=medallia-1.12.3
+MEDALLIA_LIBNETWORK_VERSION=medallia-1.12.3
 # Downloads dependencies into vendor/ directory
 mkdir -p vendor
 

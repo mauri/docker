@@ -360,6 +360,9 @@ func (container *Container) UnmountVolumes(forceSyscall bool, volumeEventLog fun
 // copyExistingContents copies from the source to the destination and
 // ensures the ownership is appropriately set.
 func copyExistingContents(source, destination string) error {
+	if destination == "" { // Empty destination means that this is a special mount which will get mounted inside the container
+		return nil
+	}
 	volList, err := ioutil.ReadDir(source)
 	if err != nil {
 		return err
