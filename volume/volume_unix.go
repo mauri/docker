@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"github.com/Sirupsen/logrus"
 )
 
 // read-write modes
@@ -18,6 +19,12 @@ var rwModes = map[string]bool{
 var labelModes = map[string]bool{
 	"Z": true,
 	"z": true,
+}
+
+// ceph/nfs modes
+var kindModes = map[string]bool{
+	"nfs": true,
+	"ceph": true,
 }
 
 // BackwardsCompatible decides whether this mount point can be
@@ -38,6 +45,7 @@ func (m *MountPoint) HasResource(absolutePath string) bool {
 
 // ParseMountSpec validates the configuration of mount information is valid.
 func ParseMountSpec(spec, volumeDriver string) (*MountPoint, error) {
+	logrus.Debugf("> ParseMountSpec: %s - %s", spec, volumeDriver)
 	spec = filepath.ToSlash(spec)
 
 	mp := &MountPoint{
@@ -66,6 +74,7 @@ func ParseMountSpec(spec, volumeDriver string) (*MountPoint, error) {
 		// Host Source Path or Name + Destination
 		mp.Source = arr[0]
 		mp.Destination = arr[1]
+		logrus.Debugf("Case2: %s - %s", mp.Source, mp.Driver)
 	case 3:
 		// HostSourcePath+DestinationPath+Mode
 		mp.Source = arr[0]
@@ -76,6 +85,8 @@ func ParseMountSpec(spec, volumeDriver string) (*MountPoint, error) {
 		}
 		mp.RW = ReadWrite(mp.Mode)
 		mp.Propagation = GetPropagation(mp.Mode)
+		mp.Driver = GetFsKind(mp.Mode)
+		logrus.Debugf("Case3: %s - %s - %+v", mp.Source, mp.Driver, mp)
 	default:
 		return nil, errInvalidSpec(spec)
 	}
@@ -93,8 +104,11 @@ func ParseMountSpec(spec, volumeDriver string) (*MountPoint, error) {
 
 	name, source := ParseVolumeSource(mp.Source)
 	if len(source) == 0 {
+		logrus.Debugf("Source == 0; mp.Driver %v", mp.Driver)
 		mp.Source = "" // Clear it out as we previously assumed it was not a name
-		mp.Driver = volumeDriver
+		if len(mp.Driver) == 0 {
+			mp.Driver = volumeDriver
+		}
 		// Named volumes can't have propagation properties specified.
 		// Their defaults will be decided by docker. This is just a
 		// safeguard. Don't want to get into situations where named
@@ -118,6 +132,7 @@ func ParseMountSpec(spec, volumeDriver string) (*MountPoint, error) {
 
 	mp.CopyData = copyData
 	mp.Name = name
+	logrus.Debugf("< ParseMountSpec: %+v __ %+v", mp, mp.Driver)
 
 	return mp, nil
 }
@@ -145,6 +160,7 @@ func ValidMountMode(mode string) bool {
 	labelModeCount := 0
 	propagationModeCount := 0
 	copyModeCount := 0
+	kindModeCount := 0
 
 	for _, o := range strings.Split(mode, ",") {
 		switch {
@@ -156,13 +172,15 @@ func ValidMountMode(mode string) bool {
 			propagationModeCount++
 		case copyModeExists(o):
 			copyModeCount++
+		case kindModes[o]:
+			kindModeCount++
 		default:
 			return false
 		}
 	}
 
 	// Only one string for each mode is allowed.
-	if rwModeCount > 1 || labelModeCount > 1 || propagationModeCount > 1 || copyModeCount > 1 {
+	if rwModeCount > 1 || labelModeCount > 1 || propagationModeCount > 1 || copyModeCount > 1 || kindModeCount > 1 {
 		return false
 	}
 	return true
@@ -183,4 +201,13 @@ func ReadWrite(mode string) bool {
 	}
 
 	return true
+}
+
+func GetFsKind(mode string) string {
+	for _, o := range strings.Split(mode, ",") {
+		if kindModes[o] {
+			return o
+		}
+	}
+	return ""
 }

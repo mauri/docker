@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/container"
 	"github.com/docker/docker/volume"
 	"github.com/docker/engine-api/types"
@@ -136,6 +137,7 @@ func (daemon *Daemon) registerMountPoints(container *container.Container, hostCo
 
 		if len(bind.Name) > 0 {
 			// create the volume
+			logrus.Debugf("Volumes register MountPoint (hostConfig.Binds): %s - %s - %s", bind.Name, bind.Driver, bind)
 			v, err := daemon.volumes.CreateWithRef(bind.Name, bind.Driver, container.ID, nil, nil)
 			if err != nil {
 				return err

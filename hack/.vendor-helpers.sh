@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 
 PROJECT=github.com/docker/docker
-
 # Downloads dependencies into vendor/ directory
 mkdir -p vendor
 
+MEDALLIA_RUNC_VERSION=medallia-1.12.6-integration
+MEDALLIA_LIBNETWORK_VERSION=medallia-1.12.6-integration
 if ! go list github.com/docker/docker/docker &> /dev/null; then
 	rm -rf .gopath
 	mkdir -p .gopath/src/github.com/docker
