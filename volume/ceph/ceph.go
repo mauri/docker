@@ -158,7 +158,7 @@ func (v *Volume) Mount(id string) (mappedDevicePath string, returnedError error)
 		if err != nil {
 			return "", err
 		}
-		cmd = exec.Command("mkfs.ext4", "-m0", v.mappedDevicePath)
+		cmd = exec.Command("mkfs.ext4", "-m0", "-E", "nodiscard,lazy_itable_init=0,lazy_journal_init=0,packed_meta_blocks=1", v.mappedDevicePath)
 		logrus.Infof("Creating ext4 filesystem in newly created Ceph volume '%s' (device %s)", v.Name(), v.mappedDevicePath)
 		if err := cmd.Run(); err != nil {
 			logrus.Errorf("Failed to create ext4 filesystem in newly created Ceph volume '%s' (device %s) - %s", v.Name(), v.mappedDevicePath, err)
