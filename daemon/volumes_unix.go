@@ -36,7 +36,7 @@ func (daemon *Daemon) setupMounts(c *container.Container) ([]container.Mount, er
 		}
 		if !c.TrySetNetworkMount(m.Destination, path) {
 			mnt := container.Mount{
-				Source:      path, // Note that for Ceph volumes, this will be the mapped device (e.g. /dev/rbd0), and for NFS shares, it will be the share URI (e.g. 1.2.3.4://foo)
+				Source:      path, // Note that for Ceph volumes, this will be the mapped device (e.g. /dev/rbd0), and for NFS shares, it will be the mounted host directory
 				Destination: m.Destination,
 				Writable:    m.RW,
 				Propagation: m.Propagation,
@@ -51,12 +51,10 @@ func (daemon *Daemon) setupMounts(c *container.Container) ([]container.Mount, er
 				}
 				daemon.LogVolumeEvent(m.Volume.Name(), "mount", attributes)
 			}
-			if m.Driver == "nfs" || m.Driver == "ceph" {
+			if m.Driver == "ceph" {
 				mnt.Data = m.Driver
-				if m.Driver == "nfs" {
-					mnt.Source = strings.Replace(path, "//", "://", 1)
-				}
 			}
+
 			mounts = append(mounts, mnt)
 		}
 	}

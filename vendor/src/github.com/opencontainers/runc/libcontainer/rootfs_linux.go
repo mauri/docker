@@ -220,7 +220,7 @@ func mountToRootfs(m *configs.Mount, rootfs, mountLabel string) error {
 				return err
 			}
 		}
-	case "ceph", "nfs":
+	case "ceph":
 		// the volume will be actually mounted later on, when network is available
 		if err := createIfNotExists(dest, true); err != nil {
 			return err
@@ -293,7 +293,7 @@ func mountToRootfsWithNetwork(m *configs.Mount, rootfs, mountLabel string) error
 	}
 
 	switch m.Device {
-	case "ceph", "nfs":
+	case "ceph":
 
 		if err := createIfNotExists(dest, true); err != nil {
 			return err
@@ -303,26 +303,25 @@ func mountToRootfsWithNetwork(m *configs.Mount, rootfs, mountLabel string) error
 		if m.Flags&syscall.MS_RDONLY != 0 {
 			modeFlag = "--read-only"
 		}
-		args := []string{m.Source, dest, modeFlag}
-		if m.Device == "nfs" {
-			// retry=0,timeo=30: Fail if NFS server can't be reached in three second (no retries) - aggressive, but necessary because the Docker daemon becomes unresponsive if the mount command hangs.
-			// nolock:           Don't use NFS locking, because the host's rpc.statd can't be reached at this point since we're already inside the network namespace.
-			//                   This won't let us use fcntl, but that's on par with today's system, since our current NFS server doesn't support locking.
-			args = append(args, "-o", "retry=0,timeo=100,nolock")
-		}
-		if m.Device == "ceph" {
-			args = append(args, "-o", "discard")
-		}
-		// Using the mount command rather than the mount syscall because for NFS mounts, the syscall requires us to figure out our own IP address
-		cmd := exec.Command("mount", args...)
-		var stderr bytes.Buffer
-		cmd.Stderr = &stderr
-		if err := cmd.Run(); err != nil {
-			e := fmt.Errorf("Failed to mount %s device %s to %s with mode flag %s: %s - %s", m.Device, m.Source, dest, modeFlag, err, strings.TrimRight(stderr.String(), "\n"))
-			fmt.Fprintf(os.Stderr, "%s\n", e)
-			return e
+
+		if err := DoMountCmd(m.Device, m.Source, dest, []string{modeFlag, "-o", "discard"}); err != nil {
+			return err
 		}
 	}
+	return nil
+}
+
+// Attempts a mount cmd
+func DoMountCmd(deviceName, source, dest string, args []string) error {
+	cmd := exec.Command("mount", append([]string{source, dest}, args...)...)
+	var out bytes.Buffer
+	cmd.Stderr = &out
+	if err := cmd.Run(); err != nil {
+		e := fmt.Errorf("Failed to mount %s device %s to %s with arguments %v: %s - %s", deviceName, source, dest, args, err, strings.TrimRight(out.String(), "\n"))
+		fmt.Fprintf(os.Stderr, "%s\n", e)
+		return e
+	}
+	fmt.Fprintf(os.Stderr, "Succeeded in mounting %s device %s to %s with arguments %v\n", deviceName, source, dest, args)
 	return nil
 }
 
