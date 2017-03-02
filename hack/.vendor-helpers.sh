@@ -5,7 +5,7 @@ PROJECT=github.com/docker/docker
 mkdir -p vendor
 
 MEDALLIA_RUNC_VERSION=1.12.6-medallia-3
-MEDALLIA_LIBNETWORK_VERSION=medallia-1.12.6-integration
+MEDALLIA_LIBNETWORK_VERSION=1.12.6-medallia-3
 if ! go list github.com/docker/docker/docker &> /dev/null; then
 	rm -rf .gopath
 	mkdir -p .gopath/src/github.com/docker
