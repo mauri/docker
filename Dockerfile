@@ -242,7 +242,7 @@ RUN set -x \
 	&& rm -rf "$GOPATH"
 
 # Install runc
-ENV RUNC_COMMIT medallia-1.12.6-integration
+ENV RUNC_COMMIT 6498c020dfaa75210787a3fe13d6d33b827efcec
 RUN set -x \
 	&& export GOPATH="$(mktemp -d)" \
 	&& git clone git://github.com/medallia/runc.git "$GOPATH/src/github.com/opencontainers/runc" \
