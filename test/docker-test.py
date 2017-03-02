@@ -16,15 +16,7 @@ class DockerTests(unittest.TestCase):
         for ip in ("ip-address", "ip"):
             out = run("docker run -t --net=routed --{}=10.1.2.3 debian:latest ip addr show dev eth0".format(ip))
             self.assertIn("inet 10.1.2.3/32 scope global eth0", out)
-
-    def test_docker_ceph_volume(self):
-        out = run("docker run -t -v docker-test-volume:/bar:ceph debian:latest ls -l /bar")
-        self.assertIn("lost+found", out)
-        out = run("docker volume ls")
-        self.assertIn("docker-test-volume", out)
-        out = run("rbd showmapped")
-        self.assertNotIn("docker-test-volume", out)
-
+        
     def test_docker_container_communication(self):
         # launch a server
         run("docker run -d --name=test_docker_server --net=routed --ip=10.1.1.1 "
@@ -63,4 +55,3 @@ def run(cmd):
 
 if __name__ == '__main__':
     unittest.main()
-

@@ -12,6 +12,7 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/volume"
+	"github.com/opencontainers/runc/libcontainer/utils"
 )
 
 const CephImageSizeMB = 1024 * 1024 // 1TB
@@ -152,16 +153,11 @@ func (v *Volume) Mount(id string) (mappedDevicePath string, returnedError error)
 	cmd := exec.Command("rbd", "create", v.Name(), "--size", strconv.Itoa(CephImageSizeMB))
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	if err := cmd.Run(); err == nil {
+	err := cmd.Run();
+	if err == nil {
 		logrus.Infof("Created Ceph volume '%s'", v.Name())
 		v.mappedDevicePath, err = mapCephVolume(v.Name())
 		if err != nil {
-			return "", err
-		}
-		cmd = exec.Command("mkfs.ext4", "-m0", "-E", "nodiscard,lazy_itable_init=0,lazy_journal_init=0,packed_meta_blocks=1", v.mappedDevicePath)
-		logrus.Infof("Creating ext4 filesystem in newly created Ceph volume '%s' (device %s)", v.Name(), v.mappedDevicePath)
-		if err := cmd.Run(); err != nil {
-			logrus.Errorf("Failed to create ext4 filesystem in newly created Ceph volume '%s' (device %s) - %s", v.Name(), v.mappedDevicePath, err)
 			return "", err
 		}
 	} else if strings.Contains(stderr.String(), fmt.Sprintf("rbd image %s already exists", v.Name())) {
@@ -176,6 +172,27 @@ func (v *Volume) Mount(id string) (mappedDevicePath string, returnedError error)
 		return "", errors.New(msg)
 	}
 
+	// Check that the volume already has a filesystem
+	fsType, err := utils.DeviceHasFilesystem(v.mappedDevicePath)
+	if err != nil {
+		return "", err
+	}
+	if fsType == "" {
+		cmd = exec.Command("mkfs.ext4", "-m0", "-E", "nodiscard,lazy_itable_init=0,lazy_journal_init=0,packed_meta_blocks=1", v.mappedDevicePath)
+		logrus.Infof("Creating ext4 filesystem in newly created Ceph volume '%s' (device %s)", v.Name(), v.mappedDevicePath)
+		if err := cmd.Run(); err != nil {
+			logrus.Errorf("Failed to create ext4 filesystem in newly created Ceph volume '%s' (device %s) - %s", v.Name(), v.mappedDevicePath, err)
+			return "", err
+		}
+	}
+	
+	fsckCmd, err := exec.Command("fsck", "-a", v.mappedDevicePath).Output()
+	if err != nil {
+		logrus.Errorf("Failed to check filesystem in %s - %s", v.Name(), err)
+		return "", err
+	}
+	logrus.Infof("Checked filesystem in %s: %s", v.Name(), fsckCmd)
+	
 	// The return value from this method will be passed to the container
 	return v.mappedDevicePath, nil
 }
