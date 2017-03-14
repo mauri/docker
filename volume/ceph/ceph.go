@@ -20,7 +20,7 @@ import (
 const (
 	CephImageSizeMB   = 1024 * 1024 // 1TB
 	LuksDevMapperPath = "/dev/mapper/"
-	criptoLUKS        = "crypto_LUKS"
+	cryptoLUKS        = "crypto_LUKS"
 )
 
 func New() *Root {
@@ -187,8 +187,10 @@ func (v *Volume) Mount(id string) (mappedDevicePath string, returnedError error)
 		return "", err
 	}
 
-	if fsType == criptoLUKS {
-		cmd = exec.Command("cryptsetup", "luksOpen", v.mappedDevicePath, v.Name())
+	mappedDevicePath = v.mappedDevicePath
+
+	if fsType == cryptoLUKS {
+		cmd = exec.Command("cryptsetup", "luksOpen", "--key-file=-", v.mappedDevicePath, v.Name())
 		stdin, err := cmd.StdinPipe()
 		if err != nil {
 			logrus.Errorf("Failed to luksOpen Ceph volume '%s' (device %s) - %s", v.Name(), v.mappedDevicePath, err)
@@ -207,37 +209,41 @@ func (v *Volume) Mount(id string) (mappedDevicePath string, returnedError error)
 		}
 
 		io.WriteString(stdin, key)
-		io.WriteString(stdin, "\n")
+		stdin.Close()
 		if err := cmd.Wait(); err != nil {
 			logrus.Errorf("Failed to luksOpen Ceph volume '%s' (device %s) - %s", v.Name(), v.mappedDevicePath, err)
 			return "", err
 		}
-		v.mappedLuksDevicePath = path.Join(LuksDevMapperPath, v.Name())
-	}
 
-	if fsType == "" {
-		//if fsType == "" {
-		cmd = exec.Command("mkfs.ext4", "-m0", "-E", "nodiscard,lazy_itable_init=0,lazy_journal_init=0,packed_meta_blocks=1", v.mappedDevicePath)
-		logrus.Infof("Creating ext4 filesystem in newly created Ceph volume '%s' (device %s)", v.Name(), v.mappedDevicePath)
-		if err := cmd.Run(); err != nil {
-			logrus.Errorf("Failed to create ext4 filesystem in newly created Ceph volume '%s' (device %s) - %s", v.Name(), v.mappedDevicePath, err)
+		v.mappedLuksDevicePath = path.Join(LuksDevMapperPath, v.Name())
+		mappedDevicePath = v.mappedLuksDevicePath
+
+		fsType, err = utils.DeviceHasFilesystem(mappedDevicePath)
+		logrus.Errorf("Checked filesystem in %s: %s", mappedDevicePath, fsType)
+		if err != nil {
 			return "", err
 		}
 	}
 
-	fsckCmd, err := exec.Command("fsck", "-a", v.mappedDevicePath).Output()
+	if fsType == "" {
+		//if fsType == "" {
+		cmd = exec.Command("mkfs.ext4", "-m0", "-E", "nodiscard,lazy_itable_init=0,lazy_journal_init=0,packed_meta_blocks=1", mappedDevicePath)
+		logrus.Infof("Creating ext4 filesystem in newly created Ceph volume '%s' (device %s)", v.Name(), mappedDevicePath)
+		if err := cmd.Run(); err != nil {
+			logrus.Errorf("Failed to create ext4 filesystem in newly created Ceph volume '%s' (device %s) - %s", v.Name(), mappedDevicePath, err)
+			return "", err
+		}
+	}
+
+	fsckCmd, err := exec.Command("fsck", "-a", mappedDevicePath).Output()
 	if err != nil {
 		logrus.Errorf("Failed to check filesystem in %s - %s", v.Name(), err)
 		return "", err
 	}
 	logrus.Infof("Checked filesystem in %s: %s", v.Name(), fsckCmd)
 
-	if fsType == criptoLUKS {
-		return v.mappedLuksDevicePath, nil
-	}
-
 	// The return value from this method will be passed to the container
-	return v.mappedDevicePath, nil
+	return mappedDevicePath, nil
 }
 
 func (v *Volume) Unmount(id string) error {
