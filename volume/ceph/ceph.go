@@ -20,7 +20,7 @@ import (
 const (
 	CephImageSizeMB   = 1024 * 1024 // 1TB
 	LuksDevMapperPath = "/dev/mapper/"
-	cryptoLUKS        = "crypto_LUKS"
+	cryptoLuksFsType  = "crypto_LUKS"
 )
 
 func New() *Root {
@@ -187,55 +187,54 @@ func (v *Volume) Mount(id string) (mappedDevicePath string, returnedError error)
 		return "", err
 	}
 
-	mappedDevicePath = v.mappedDevicePath
+	deviceToMount := v.mappedDevicePath
 
-	if fsType == cryptoLUKS {
-		cmd = exec.Command("cryptsetup", "luksOpen", "--key-file=-", v.mappedDevicePath, v.Name())
+	if fsType == cryptoLuksFsType {
+		cmd = exec.Command("cryptsetup", "luksOpen", "--key-file=-", deviceToMount, v.Name())
 		stdin, err := cmd.StdinPipe()
 		if err != nil {
-			logrus.Errorf("Failed to luksOpen Ceph volume '%s' (device %s) - %s", v.Name(), v.mappedDevicePath, err)
+			logrus.Errorf("Failed to luksOpen Ceph volume '%s' (device %s) - %s", v.Name(), deviceToMount, err)
 			return "", err
 		}
 		defer stdin.Close()
 		if err := cmd.Start(); err != nil {
-			logrus.Errorf("Failed to luksOpen Ceph volume '%s' (device %s) - %s", v.Name(), v.mappedDevicePath, err)
+			logrus.Errorf("Failed to luksOpen Ceph volume '%s' (device %s) - %s", v.Name(), deviceToMount, err)
 			return "", err
 		}
 
 		key, err := getLuksKey(v.Name())
 		if err != nil {
-			logrus.Errorf("Failed to luksOpen Ceph volume '%s' (device %s) - %s", v.Name(), v.mappedDevicePath, err)
+			logrus.Errorf("Failed to luksOpen Ceph volume '%s' (device %s) - %s", v.Name(), deviceToMount, err)
 			return "", err
 		}
 
 		io.WriteString(stdin, key)
 		stdin.Close()
 		if err := cmd.Wait(); err != nil {
-			logrus.Errorf("Failed to luksOpen Ceph volume '%s' (device %s) - %s", v.Name(), v.mappedDevicePath, err)
+			logrus.Errorf("Failed to luksOpen Ceph volume '%s' (device %s) - %s", v.Name(), deviceToMount, err)
 			return "", err
 		}
 
 		v.mappedLuksDevicePath = path.Join(LuksDevMapperPath, v.Name())
-		mappedDevicePath = v.mappedLuksDevicePath
+		deviceToMount = v.mappedLuksDevicePath
 
-		fsType, err = utils.DeviceHasFilesystem(mappedDevicePath)
-		logrus.Errorf("Checked filesystem in %s: %s", mappedDevicePath, fsType)
+		fsType, err = utils.DeviceHasFilesystem(deviceToMount)
+		logrus.Errorf("Checked filesystem in %s: %s", deviceToMount, fsType)
 		if err != nil {
 			return "", err
 		}
 	}
 
 	if fsType == "" {
-		//if fsType == "" {
-		cmd = exec.Command("mkfs.ext4", "-m0", "-E", "nodiscard,lazy_itable_init=0,lazy_journal_init=0,packed_meta_blocks=1", mappedDevicePath)
-		logrus.Infof("Creating ext4 filesystem in newly created Ceph volume '%s' (device %s)", v.Name(), mappedDevicePath)
+		cmd = exec.Command("mkfs.ext4", "-m0", "-E", "nodiscard,lazy_itable_init=0,lazy_journal_init=0,packed_meta_blocks=1", deviceToMount)
+		logrus.Infof("Creating ext4 filesystem in newly created Ceph volume '%s' (device %s)", v.Name(), deviceToMount)
 		if err := cmd.Run(); err != nil {
-			logrus.Errorf("Failed to create ext4 filesystem in newly created Ceph volume '%s' (device %s) - %s", v.Name(), mappedDevicePath, err)
+			logrus.Errorf("Failed to create ext4 filesystem in newly created Ceph volume '%s' (device %s) - %s", v.Name(), deviceToMount, err)
 			return "", err
 		}
 	}
 
-	fsckCmd, err := exec.Command("fsck", "-a", mappedDevicePath).Output()
+	fsckCmd, err := exec.Command("fsck", "-a", deviceToMount).Output()
 	if err != nil {
 		logrus.Errorf("Failed to check filesystem in %s - %s", v.Name(), err)
 		return "", err
@@ -243,7 +242,7 @@ func (v *Volume) Mount(id string) (mappedDevicePath string, returnedError error)
 	logrus.Infof("Checked filesystem in %s: %s", v.Name(), fsckCmd)
 
 	// The return value from this method will be passed to the container
-	return mappedDevicePath, nil
+	return deviceToMount, nil
 }
 
 func (v *Volume) Unmount(id string) error {
@@ -259,7 +258,7 @@ func (v *Volume) Unmount(id string) error {
 		return err
 	}
 
-	if fsType == "crypto_LUKS" {
+	if fsType == cryptoLuksFsType {
 		cmd := exec.Command("cryptsetup", "luksClose", v.Name())
 		if err := cmd.Run(); err != nil {
 			logrus.Errorf("Failed to luksClose Ceph volume '%s' (device %s) - %s", v.Name(), v.mappedDevicePath, err)
