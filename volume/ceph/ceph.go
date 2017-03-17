@@ -123,7 +123,6 @@ func unmapCephVolume(name, mappedDevicePath string) error {
 
 type Volume struct {
 	m         sync.Mutex
-	usedCount int
 	// unique name of the volume
 	name string
 	// driverName is the name of the driver that created the volume.
@@ -150,10 +149,7 @@ func (v *Volume) Mount(id string) (mappedDevicePath string, returnedError error)
 	v.m.Lock()
 	defer v.m.Unlock()
 	logrus.Debugf("Mount: %s", mappedDevicePath)
-	// Note that if Mount() returns an error, Docker will still call Unmount(), so there is no need to call release() if anything fails
-	if err := v.use(); err != nil {
-		return "", err
-	}
+	// The RBD wrapper is the gatekeeper so no need to keep track of the usage
 
 	// TODO: Might want to map with --options rw/ro here, but then we need to sneak in the RW flag somehow
 	var stdout bytes.Buffer
@@ -248,11 +244,6 @@ func (v *Volume) Mount(id string) (mappedDevicePath string, returnedError error)
 func (v *Volume) Unmount(id string) error {
 	v.m.Lock()
 	defer v.m.Unlock()
-
-	if err := v.release(); err != nil {
-		return err
-	}
-
 	fsType, err := utils.DeviceHasFilesystem(v.mappedDevicePath)
 	if err != nil {
 		return err
@@ -265,36 +256,11 @@ func (v *Volume) Unmount(id string) error {
 			return err
 		}
 	}
-	//if v.usedCount == 0 { // Even if the volume is attempted to be used multiple times, only the first use will actually succeed in mapping it
 	unmapCephVolume(v.name, v.mappedDevicePath)
-	//}
-
 	return nil
 }
 
 func (v *Volume) Status() map[string]interface{} {
-	return nil
-}
-
-func (v *Volume) use() error {
-	// Note that the call to use() is assumed to be contained in a v.m.Lock()/Unlock() (the mutex isn't reentrant, so we can't lock it again here)
-	v.usedCount++ // If Mount() fails, Unmount() (and therefore release()) will be called, so we need to increment usedCount even if the volume is already in use
-	if v.usedCount > 1 {
-		msg := fmt.Sprintf("The Ceph volume '%s' is already being used by a running container in this Docker daemon", v.Name())
-		logrus.Errorf(msg)
-		return errors.New(msg)
-	}
-	return nil
-}
-
-func (v *Volume) release() error {
-	// Note that the call to release() is assumed to be contained in a v.m.Lock()/Unlock() (the mutex isn't reentrant, so we can't lock it again here)
-	if v.usedCount == 0 { // Shouldn't happen as long as Docker calls Mount()/Unmount() the way we think, but we've misunderstood the call sequence before
-		msg := fmt.Sprintf("Bug: The Ceph volume '%s' is being released more times than it has been used", v.Name())
-		logrus.Errorf(msg)
-		return errors.New(msg)
-	}
-	v.usedCount--
 	return nil
 }
 
