@@ -2,7 +2,6 @@
 import unittest
 import subprocess
 
-
 class DockerCephTests(unittest.TestCase):
 
     def test_docker_ceph_volume(self):
@@ -41,6 +40,24 @@ class DockerCephTests(unittest.TestCase):
         out = run("rbd resize --size=2G docker-test-volume")
         out = run(show_fs_size)
         self.assertIn("2.0G", out)
+        out = run("rbd rm docker-test-volume")
+
+    def test_docker_ceph_luks_volume(self):
+        # create encripted luks volume
+        out = run("rbd create --size=1G docker-test-volume")
+        dev = run("rbd map docker-test-volume 2>/dev/null").strip()
+        out = run("echo 'docker-test-volume' | cryptsetup luksFormat -q %s" % dev )
+        out = run("rbd unmap docker-test-volume")
+
+        create_file = "docker run -t -v docker-test-volume:/foo:ceph debian:latest /bin/bash -c \"echo 'dog' > /foo/cat\""
+        out = run(create_file)
+        read_file = "docker run -t -v docker-test-volume:/foo:ceph debian:latest cat /foo/cat"
+        out = run(read_file)
+        self.assertIn("dog", out)
+
+        out = run("rbd showmapped")
+        self.assertNotIn("docker-test-volume", out)
+
         out = run("rbd rm docker-test-volume")
 
 def run(cmd):
