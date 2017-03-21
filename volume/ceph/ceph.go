@@ -122,7 +122,7 @@ func unmapCephVolume(name, mappedDevicePath string) error {
 }
 
 type Volume struct {
-	m         sync.Mutex
+	m sync.Mutex
 	// unique name of the volume
 	name string
 	// driverName is the name of the driver that created the volume.
@@ -186,7 +186,7 @@ func (v *Volume) Mount(id string) (mappedDevicePath string, returnedError error)
 	deviceToMount := v.mappedDevicePath
 
 	if fsType == cryptoLuksFsType {
-		cmd = exec.Command("cryptsetup", "luksOpen", "--key-file=-", deviceToMount, v.Name())
+		cmd = exec.Command("cryptsetup", "luksOpen", "--allow-discards", "--key-file=-", deviceToMount, v.Name())
 		stdin, err := cmd.StdinPipe()
 		if err != nil {
 			logrus.Errorf("Failed to luksOpen Ceph volume '%s' (device %s) - %s", v.Name(), deviceToMount, err)
