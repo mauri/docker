@@ -296,7 +296,7 @@ func mountToRootfsWithNetwork(m *configs.Mount, rootfs, mountLabel string) error
 	}
 
 	switch m.Device {
-	case "ceph":
+	case "ceph", "nfs":
 
 		if err := createIfNotExists(dest, true); err != nil {
 			return err
@@ -307,30 +307,30 @@ func mountToRootfsWithNetwork(m *configs.Mount, rootfs, mountLabel string) error
 			modeFlag = "--read-only"
 		}
 
-		if err := DoMountCmd(m.Device, m.Source, dest, []string{modeFlag, "-o", "discard"}); err != nil {
-			return err
-		}
+		if m.Device == "ceph" {
+			if err := DoMountCmd(m.Device, m.Source, dest, []string{modeFlag, "-o", "discard"}); err != nil {
+				return err
+			}
 
-		fsType, err := libcontainerUtils.DeviceHasFilesystem(m.Source)
-		if err != nil {
-			return err
-		}
-		// attempt to resize filesystem if it's ext{234}
-		if matched, _ := regexp.MatchString("ext[234]$", fsType); matched {
-			logrus.Infof("Synchronizing the size of volume %s with fs.", m.Source)
-			resizeOutput, err := exec.Command("resize2fs", m.Source).Output()
+			fsType, err := libcontainerUtils.DeviceHasFilesystem(m.Source)
 			if err != nil {
 				return err
 			}
-			logrus.Infof("Ran resize2fs on device '%s': %s", m.Source, resizeOutput)
-		}
-	case "nfs":
-		// the nfs volume is already mounted in the host.
-		if err := createIfNotExists(dest, true); err != nil {
-			return err
-		}
-		if err := DoMountCmd("nfs", m.Source, dest, []string{"--bind"}); err != nil {
-			return err
+			// attempt to resize filesystem if it's ext{234}
+			if matched, _ := regexp.MatchString("ext[234]$", fsType); matched {
+				logrus.Infof("Synchronizing the size of volume %s with fs.", m.Source)
+				resizeOutput, err := exec.Command("resize2fs", m.Source).Output()
+				if err != nil {
+					return err
+				}
+				logrus.Infof("Ran resize2fs on device '%s': %s", m.Source, resizeOutput)
+			}
+		} else if m.Device == "nfs" {
+			// Perform a bind mount of the nfs directory already mounted in the host, this is
+			// done after the network is available to preserve the volumes declaration order.
+			if err := DoMountCmd(m.Device, m.Source, dest, []string{modeFlag, "--bind"}); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
