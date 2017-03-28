@@ -51,7 +51,7 @@ func (daemon *Daemon) setupMounts(c *container.Container) ([]container.Mount, er
 				}
 				daemon.LogVolumeEvent(m.Volume.Name(), "mount", attributes)
 			}
-			if m.Driver == "ceph" {
+			if m.Driver == "nfs" || m.Driver == "ceph" {
 				mnt.Data = m.Driver
 			}
 

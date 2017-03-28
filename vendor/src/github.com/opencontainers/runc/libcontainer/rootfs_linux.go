@@ -223,7 +223,7 @@ func mountToRootfs(m *configs.Mount, rootfs, mountLabel string) error {
 				return err
 			}
 		}
-	case "ceph":
+	case "ceph", "nfs":
 		// the volume will be actually mounted later on, when network is available
 		if err := createIfNotExists(dest, true); err != nil {
 			return err
@@ -323,6 +323,14 @@ func mountToRootfsWithNetwork(m *configs.Mount, rootfs, mountLabel string) error
 				return err
 			}
 			logrus.Infof("Ran resize2fs on device '%s': %s", m.Source, resizeOutput)
+		}
+	case "nfs":
+		// the nfs volume is already mounted in the host.
+		if err := createIfNotExists(dest, true); err != nil {
+			return err
+		}
+		if err := DoMountCmd("nfs", m.Source, dest, []string{"--bind"}); err != nil {
+			return err
 		}
 	}
 	return nil
