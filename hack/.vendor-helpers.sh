@@ -4,7 +4,7 @@ PROJECT=github.com/docker/docker
 # Downloads dependencies into vendor/ directory
 mkdir -p vendor
 
-MEDALLIA_RUNC_VERSION=c0db75bcbd6e34aa7c43aca3e70bbc398dd6bb2e
+MEDALLIA_RUNC_VERSION=1.12.6-medallia-6
 MEDALLIA_LIBNETWORK_VERSION=1.12.6-medallia-3
 if ! go list github.com/docker/docker/docker &> /dev/null; then
 	rm -rf .gopath
