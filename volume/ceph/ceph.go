@@ -252,6 +252,7 @@ func (v *Volume) Unmount(id string) error {
 	if fsType == cryptoLuksFsType {
 		cmd := exec.Command("cryptsetup", "luksClose", v.Name())
 		if err := cmd.Run(); err != nil {
+			unmapCephVolume(v.name, v.mappedDevicePath)
 			logrus.Errorf("Failed to luksClose Ceph volume '%s' (device %s) - %s", v.Name(), v.mappedDevicePath, err)
 			return err
 		}
