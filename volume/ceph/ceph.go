@@ -161,20 +161,24 @@ func (v *Volume) Mount(id string) (mappedDevicePath string, returnedError error)
 	err := cmd.Run()
 	if err == nil {
 		logrus.Infof("Created Ceph volume '%s'", v.Name())
-		v.mappedDevicePath, err = mapCephVolume(v.Name())
-		if err != nil {
-			return "", err
-		}
-	} else if strings.Contains(stderr.String(), fmt.Sprintf("rbd image %s already exists", v.Name())) {
-		logrus.Infof("Found existing Ceph volume %s", v.Name())
-		v.mappedDevicePath, err = mapCephVolume(v.Name())
-		if err != nil {
-			return "", err
-		}
 	} else {
-		msg := fmt.Sprintf("Failed to create Ceph volume '%s' - %s", v.Name(), err)
-		logrus.Errorf(msg)
-		return "", errors.New(msg)
+		// if rbd create returned EEXIST (17) the image is already there and we just need to map
+		if exitError, ok := err.(*exec.ExitError); ok {
+			imageSpec := strings.Split(v.Name(), "/") // strip the pool from the name
+			imageName := imageSpec[len(imageSpec) - 1]
+			waitStatus := exitError.Sys().(syscall.WaitStatus)
+			if waitStatus.ExitStatus() == 17 || strings.Contains(stderr.String(), fmt.Sprintf("rbd image %s already exists", imageName)) {
+				logrus.Infof("Found existing Ceph volume '%s'. %s", v.Name(), err)
+			} else {
+				msg := fmt.Sprintf("Failed to create Ceph volume '%s'. %s. (%d) ", v.Name(), stderr.String(), waitStatus.ExitStatus())
+				logrus.Errorf(msg)
+				return "", errors.New(msg)
+			}
+		}
+	}
+	v.mappedDevicePath, err = mapCephVolume(v.Name())
+	if err != nil {
+		return "", err
 	}
 
 	// Check that the volume already has a filesystem
