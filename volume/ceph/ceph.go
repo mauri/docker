@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/volume"
@@ -174,6 +175,8 @@ func (v *Volume) Mount(id string) (mappedDevicePath string, returnedError error)
 				logrus.Errorf(msg)
 				return "", errors.New(msg)
 			}
+		} else {
+			return "", err
 		}
 	}
 	v.mappedDevicePath, err = mapCephVolume(v.Name())
@@ -190,7 +193,8 @@ func (v *Volume) Mount(id string) (mappedDevicePath string, returnedError error)
 	deviceToMount := v.mappedDevicePath
 
 	if fsType == cryptoLuksFsType {
-		cmd = exec.Command("cryptsetup", "luksOpen", "--allow-discards", "--key-file=-", deviceToMount, v.Name())
+		luksDevMapperName := getLuksDeviceMapperName(v.Name())
+		cmd = exec.Command("cryptsetup", "luksOpen", "--allow-discards", "--key-file=-", deviceToMount, luksDevMapperName)
 		stdin, err := cmd.StdinPipe()
 		if err != nil {
 			logrus.Errorf("Failed to luksOpen Ceph volume '%s' (device %s) - %s", v.Name(), deviceToMount, err)
@@ -215,11 +219,11 @@ func (v *Volume) Mount(id string) (mappedDevicePath string, returnedError error)
 			return "", err
 		}
 
-		v.mappedLuksDevicePath = path.Join(LuksDevMapperPath, v.Name())
+		v.mappedLuksDevicePath = path.Join(LuksDevMapperPath, luksDevMapperName)
 		deviceToMount = v.mappedLuksDevicePath
 
 		fsType, err = utils.DeviceHasFilesystem(deviceToMount)
-		logrus.Errorf("Checked filesystem in %s: %s", deviceToMount, fsType)
+		logrus.Errorf("Filesystem in %s: %s", deviceToMount, fsType)
 		if err != nil {
 			return "", err
 		}
@@ -254,7 +258,8 @@ func (v *Volume) Unmount(id string) error {
 	}
 
 	if fsType == cryptoLuksFsType {
-		cmd := exec.Command("cryptsetup", "luksClose", v.Name())
+		luksDevMapperName := getLuksDeviceMapperName(v.Name())
+		cmd := exec.Command("cryptsetup", "luksClose", luksDevMapperName)
 		if err := cmd.Run(); err != nil {
 			unmapCephVolume(v.name, v.mappedDevicePath)
 			logrus.Errorf("Failed to luksClose Ceph volume '%s' (device %s) - %s", v.Name(), v.mappedDevicePath, err)
@@ -271,4 +276,8 @@ func (v *Volume) Status() map[string]interface{} {
 
 func getLuksKey(name string) (string, error) {
 	return name, nil
+}
+
+func getLuksDeviceMapperName(name string) (string) {
+	return strings.Replace(name, "/", "--", -1)
 }
