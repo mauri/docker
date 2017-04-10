@@ -361,7 +361,7 @@ func (container *Container) UnmountVolumes(forceSyscall bool, volumeEventLog fun
 		}
 	}
 	if unmountError != nil {
-		return unmountError // return the last catched unmount error
+		return unmountError // return the last caught unmount error
 	}
 
 	return nil

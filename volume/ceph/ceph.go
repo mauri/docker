@@ -176,6 +176,7 @@ func (v *Volume) Mount(id string) (mappedDevicePath string, returnedError error)
 				return "", errors.New(msg)
 			}
 		} else {
+			logrus.Errorf(fmt.Sprintf("Failed to get exit code from ceph volume creation '%s'. %s", v.Name(), stderr.String()))
 			return "", err
 		}
 	}
@@ -252,6 +253,7 @@ func (v *Volume) Mount(id string) (mappedDevicePath string, returnedError error)
 func (v *Volume) Unmount(id string) error {
 	v.m.Lock()
 	defer v.m.Unlock()
+	defer unmapCephVolume(v.name, v.mappedDevicePath)
 	fsType, err := utils.DeviceHasFilesystem(v.mappedDevicePath)
 	if err != nil {
 		return err
@@ -261,12 +263,10 @@ func (v *Volume) Unmount(id string) error {
 		luksDevMapperName := getLuksDeviceMapperName(v.Name())
 		cmd := exec.Command("cryptsetup", "luksClose", luksDevMapperName)
 		if err := cmd.Run(); err != nil {
-			unmapCephVolume(v.name, v.mappedDevicePath)
 			logrus.Errorf("Failed to luksClose Ceph volume '%s' (device %s) - %s", v.Name(), v.mappedDevicePath, err)
 			return err
 		}
 	}
-	unmapCephVolume(v.name, v.mappedDevicePath)
 	return nil
 }
 
