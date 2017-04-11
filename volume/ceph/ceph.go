@@ -84,21 +84,22 @@ func (r *Root) Scope() string {
 	return volume.LocalScope
 }
 
-func mapCephVolume(name string) (string, error) {
+func (v *Volume) mapCephVolume() (error) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	cmd := exec.Command("rbd", "map", name)
+	cmd := exec.Command("rbd", "map", v.name)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	var mappedDevicePath string
 	if err := cmd.Run(); err == nil {
 		mappedDevicePath = strings.TrimRight(stdout.String(), "\n")
-		logrus.Infof("Succeeded in mapping Ceph volume '%s' to %s", name, mappedDevicePath)
-		return mappedDevicePath, nil
+		logrus.Infof("Succeeded in mapping Ceph volume '%s' to %s", v.name, mappedDevicePath)
+		v.mappedDevicePath = mappedDevicePath
+		return nil
 	} else {
-		msg := fmt.Sprintf("Failed to map Ceph volume '%s': %s - %s", name, err, strings.TrimRight(stderr.String(), "\n"))
+		msg := fmt.Sprintf("Failed to map Ceph volume '%s': %s - %s", v.name, err, strings.TrimRight(stderr.String(), "\n"))
 		logrus.Errorf(msg)
-		return "", errors.New(msg)
+		return errors.New(msg)
 	}
 }
 
@@ -109,15 +110,16 @@ func (r *Root) Remove(v volume.Volume) error {
 	return nil
 }
 
-func unmapCephVolume(name, mappedDevicePath string) error {
-	cmd := exec.Command("rbd", "unmap", mappedDevicePath)
+func (v *Volume) unmapCephVolume() error {
+	cmd := exec.Command("rbd", "unmap", v.mappedDevicePath)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	err := cmd.Run()
 	if err == nil {
-		logrus.Infof("Succeeded in unmapping Ceph volume '%s' from %s", name, mappedDevicePath)
+		logrus.Infof("Succeeded in unmapping Ceph volume '%s' from %s", v.name, v.mappedDevicePath)
+		v.mappedDevicePath = ""
 	} else {
-		logrus.Errorf("Failed to unmap Ceph volume '%s' from %s: %s - %s", name, mappedDevicePath, err, strings.TrimRight(stderr.String(), "\n"))
+		logrus.Errorf("Failed to unmap Ceph volume '%s' from %s: %s - %s", v.name, v.mappedDevicePath, err, strings.TrimRight(stderr.String(), "\n"))
 	}
 	return err
 }
@@ -180,7 +182,7 @@ func (v *Volume) Mount(id string) (mappedDevicePath string, returnedError error)
 			return "", err
 		}
 	}
-	v.mappedDevicePath, err = mapCephVolume(v.Name())
+	err = v.mapCephVolume()
 	if err != nil {
 		return "", err
 	}
@@ -253,7 +255,7 @@ func (v *Volume) Mount(id string) (mappedDevicePath string, returnedError error)
 func (v *Volume) Unmount(id string) error {
 	v.m.Lock()
 	defer v.m.Unlock()
-	defer unmapCephVolume(v.name, v.mappedDevicePath)
+	defer v.unmapCephVolume()
 	fsType, err := utils.DeviceHasFilesystem(v.mappedDevicePath)
 	if err != nil {
 		return err
