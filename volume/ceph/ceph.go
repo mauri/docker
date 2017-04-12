@@ -182,8 +182,7 @@ func (v *Volume) Mount(id string) (mappedDevicePath string, returnedError error)
 			return "", err
 		}
 	}
-	err = v.mapCephVolume()
-	if err != nil {
+	if err := v.mapCephVolume(); err != nil {
 		return "", err
 	}
 
