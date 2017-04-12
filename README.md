@@ -121,6 +121,12 @@ docker run -v 10.112.12.13//foo:/foo:nfs,rw ubuntu
 docker run -v ceph-volume-foo:/foo:ceph,rw ubuntu
 ```
 
+## Build
+
+```bash
+DOCKER_BUILD_PKGS=ubuntu-xenial make deb
+```
+
 
 Docker: the container engine [![Release](https://img.shields.io/github/release/docker/docker.svg)](https://github.com/docker/docker/releases/latest)
 ============================

@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/docker/docker/volume"
@@ -83,21 +84,22 @@ func (r *Root) Scope() string {
 	return volume.LocalScope
 }
 
-func mapCephVolume(name string) (string, error) {
+func (v *Volume) mapCephVolume() (error) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	cmd := exec.Command("rbd", "map", name)
+	cmd := exec.Command("rbd", "map", v.name)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	var mappedDevicePath string
 	if err := cmd.Run(); err == nil {
 		mappedDevicePath = strings.TrimRight(stdout.String(), "\n")
-		logrus.Infof("Succeeded in mapping Ceph volume '%s' to %s", name, mappedDevicePath)
-		return mappedDevicePath, nil
+		logrus.Infof("Succeeded in mapping Ceph volume '%s' to %s", v.name, mappedDevicePath)
+		v.mappedDevicePath = mappedDevicePath
+		return nil
 	} else {
-		msg := fmt.Sprintf("Failed to map Ceph volume '%s': %s - %s", name, err, strings.TrimRight(stderr.String(), "\n"))
+		msg := fmt.Sprintf("Failed to map Ceph volume '%s': %s - %s", v.name, err, strings.TrimRight(stderr.String(), "\n"))
 		logrus.Errorf(msg)
-		return "", errors.New(msg)
+		return errors.New(msg)
 	}
 }
 
@@ -108,15 +110,16 @@ func (r *Root) Remove(v volume.Volume) error {
 	return nil
 }
 
-func unmapCephVolume(name, mappedDevicePath string) error {
-	cmd := exec.Command("rbd", "unmap", mappedDevicePath)
+func (v *Volume) unmapCephVolume() error {
+	cmd := exec.Command("rbd", "unmap", v.mappedDevicePath)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	err := cmd.Run()
 	if err == nil {
-		logrus.Infof("Succeeded in unmapping Ceph volume '%s' from %s", name, mappedDevicePath)
+		logrus.Infof("Succeeded in unmapping Ceph volume '%s' from %s", v.name, v.mappedDevicePath)
+		v.mappedDevicePath = ""
 	} else {
-		logrus.Errorf("Failed to unmap Ceph volume '%s' from %s: %s - %s", name, mappedDevicePath, err, strings.TrimRight(stderr.String(), "\n"))
+		logrus.Errorf("Failed to unmap Ceph volume '%s' from %s: %s - %s", v.name, v.mappedDevicePath, err, strings.TrimRight(stderr.String(), "\n"))
 	}
 	return err
 }
@@ -161,20 +164,26 @@ func (v *Volume) Mount(id string) (mappedDevicePath string, returnedError error)
 	err := cmd.Run()
 	if err == nil {
 		logrus.Infof("Created Ceph volume '%s'", v.Name())
-		v.mappedDevicePath, err = mapCephVolume(v.Name())
-		if err != nil {
-			return "", err
-		}
-	} else if strings.Contains(stderr.String(), fmt.Sprintf("rbd image %s already exists", v.Name())) {
-		logrus.Infof("Found existing Ceph volume %s", v.Name())
-		v.mappedDevicePath, err = mapCephVolume(v.Name())
-		if err != nil {
-			return "", err
-		}
 	} else {
-		msg := fmt.Sprintf("Failed to create Ceph volume '%s' - %s", v.Name(), err)
-		logrus.Errorf(msg)
-		return "", errors.New(msg)
+		// if rbd create returned EEXIST (17) the image is already there and we just need to map
+		if exitError, ok := err.(*exec.ExitError); ok {
+			imageSpec := strings.Split(v.Name(), "/") // strip the pool from the name
+			imageName := imageSpec[len(imageSpec) - 1]
+			waitStatus := exitError.Sys().(syscall.WaitStatus)
+			if waitStatus.ExitStatus() == 17 || strings.Contains(stderr.String(), fmt.Sprintf("rbd image %s already exists", imageName)) {
+				logrus.Infof("Found existing Ceph volume '%s'. %s", v.Name(), err)
+			} else {
+				msg := fmt.Sprintf("Failed to create Ceph volume '%s'. %s. (%d) ", v.Name(), stderr.String(), waitStatus.ExitStatus())
+				logrus.Errorf(msg)
+				return "", errors.New(msg)
+			}
+		} else {
+			logrus.Errorf(fmt.Sprintf("Failed to get exit code from ceph volume creation '%s'. %s", v.Name(), stderr.String()))
+			return "", err
+		}
+	}
+	if err := v.mapCephVolume(); err != nil {
+		return "", err
 	}
 
 	// Check that the volume already has a filesystem
@@ -186,7 +195,8 @@ func (v *Volume) Mount(id string) (mappedDevicePath string, returnedError error)
 	deviceToMount := v.mappedDevicePath
 
 	if fsType == cryptoLuksFsType {
-		cmd = exec.Command("cryptsetup", "luksOpen", "--allow-discards", "--key-file=-", deviceToMount, v.Name())
+		luksDevMapperName := getLuksDeviceMapperName(v.Name())
+		cmd = exec.Command("cryptsetup", "luksOpen", "--allow-discards", "--key-file=-", deviceToMount, luksDevMapperName)
 		stdin, err := cmd.StdinPipe()
 		if err != nil {
 			logrus.Errorf("Failed to luksOpen Ceph volume '%s' (device %s) - %s", v.Name(), deviceToMount, err)
@@ -211,11 +221,11 @@ func (v *Volume) Mount(id string) (mappedDevicePath string, returnedError error)
 			return "", err
 		}
 
-		v.mappedLuksDevicePath = path.Join(LuksDevMapperPath, v.Name())
+		v.mappedLuksDevicePath = path.Join(LuksDevMapperPath, luksDevMapperName)
 		deviceToMount = v.mappedLuksDevicePath
 
 		fsType, err = utils.DeviceHasFilesystem(deviceToMount)
-		logrus.Errorf("Checked filesystem in %s: %s", deviceToMount, fsType)
+		logrus.Errorf("Filesystem in %s: %s", deviceToMount, fsType)
 		if err != nil {
 			return "", err
 		}
@@ -244,20 +254,20 @@ func (v *Volume) Mount(id string) (mappedDevicePath string, returnedError error)
 func (v *Volume) Unmount(id string) error {
 	v.m.Lock()
 	defer v.m.Unlock()
+	defer v.unmapCephVolume()
 	fsType, err := utils.DeviceHasFilesystem(v.mappedDevicePath)
 	if err != nil {
 		return err
 	}
 
 	if fsType == cryptoLuksFsType {
-		cmd := exec.Command("cryptsetup", "luksClose", v.Name())
+		luksDevMapperName := getLuksDeviceMapperName(v.Name())
+		cmd := exec.Command("cryptsetup", "luksClose", luksDevMapperName)
 		if err := cmd.Run(); err != nil {
-			unmapCephVolume(v.name, v.mappedDevicePath)
 			logrus.Errorf("Failed to luksClose Ceph volume '%s' (device %s) - %s", v.Name(), v.mappedDevicePath, err)
 			return err
 		}
 	}
-	unmapCephVolume(v.name, v.mappedDevicePath)
 	return nil
 }
 
@@ -267,4 +277,8 @@ func (v *Volume) Status() map[string]interface{} {
 
 func getLuksKey(name string) (string, error) {
 	return name, nil
+}
+
+func getLuksDeviceMapperName(name string) (string) {
+	return strings.Replace(name, "/", "--", -1)
 }

@@ -320,6 +320,7 @@ func (container *Container) UnmountVolumes(forceSyscall bool, volumeEventLog fun
 	var (
 		volumeMounts []volume.MountPoint
 		err          error
+		unmountError error
 	)
 
 	for _, mntPoint := range container.MountPoints {
@@ -345,7 +346,10 @@ func (container *Container) UnmountVolumes(forceSyscall bool, volumeEventLog fun
 
 		if volumeMount.Volume != nil {
 			if err := volumeMount.Volume.Unmount(volumeMount.ID); err != nil {
-				return err
+				logrus.Errorf("%s Unmount failed %v", volumeMount.Volume.Name(), err)
+				// on error keep unmounting the rest of the volumes. Fixed in docker 1.13
+				unmountError = err
+				continue
 			}
 			volumeMount.ID = ""
 
@@ -355,6 +359,9 @@ func (container *Container) UnmountVolumes(forceSyscall bool, volumeEventLog fun
 			}
 			volumeEventLog(volumeMount.Volume.Name(), "unmount", attributes)
 		}
+	}
+	if unmountError != nil {
+		return unmountError // return the last caught unmount error
 	}
 
 	return nil

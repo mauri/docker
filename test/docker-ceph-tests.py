@@ -3,62 +3,71 @@ import unittest
 import subprocess
 
 class DockerCephTests(unittest.TestCase):
+    IMAGE="docker-test-volume"
+
+    def tearDown(self):
+        run("rbd rm " + self.IMAGE)
 
     def test_docker_ceph_volume(self):
-        out = run("docker run -t -v docker-test-volume:/bar:ceph debian:latest ls -l /bar")
+        out = run("docker run -t -v {}:/bar:ceph debian:latest ls -l /bar".format(self.IMAGE))
         self.assertIn("lost+found", out)
         out = run("docker volume ls")
-        self.assertIn("docker-test-volume", out)
+        self.assertIn(self.IMAGE, out)
         out = run("rbd showmapped")
-        self.assertNotIn("docker-test-volume", out)
-        out = run("rbd rm docker-test-volume")
+        self.assertNotIn(self.IMAGE, out)
 
     def test_docker_ceph_initialize_fs(self):
-        out = run("rbd create --size=1G docker-test-volume")
-        out = run("docker run -t -v docker-test-volume:/bar:ceph debian:latest ls -l /bar")
+        out = run("rbd create --size=1G {}".format(self.IMAGE))
+        out = run("docker run -t -v {}:/bar:ceph debian:latest ls -l /bar".format(self.IMAGE))
         self.assertIn("lost+found", out)
-        out = run("rbd rm docker-test-volume")
 
     def test_docker_ceph_dont_initialize_fs(self):
-        out = run("rbd create --size=1G docker-test-volume")
-        dev = run("rbd map docker-test-volume 2>/dev/null").strip()
-        out = run("mkfs.ext4 -m0 " + dev)
+        out = run("rbd create --size=1G {}".format(self.IMAGE))
+        dev = run("rbd map {} 2>/dev/null".format(self.IMAGE)).strip()
+        out = run("mkfs.ext4 -m0 {}".format(dev))
         tmpdir = run("mktemp -d ").strip()
-        out = run("mount " + dev + " " + tmpdir)
-        out = run("touch " + tmpdir + "/testfile")
-        out = run("umount " + dev)
-        out = run("rbd unmap docker-test-volume")
-        out = run("docker run -t -v docker-test-volume:/bar:ceph debian:latest ls -l /bar")
+        out = run("mount {} {}".format(dev, tmpdir))
+        out = run("touch {}/testfile".format(tmpdir))
+        out = run("umount {}".format(dev))
+        out = run("rbd unmap {}".format(self.IMAGE))
+        out = run("docker run -t -v {}:/bar:ceph debian:latest ls -l /bar".format(self.IMAGE))
         self.assertIn("testfile", out)
-        out = run("rbd rm docker-test-volume")
 
     def test_docker_ceph_auto_resize(self):
-        show_fs_size = "docker run -t -v docker-test-volume:/bar:ceph debian:latest df -h --output=size /bar"
-        out = run("rbd create --size=1G docker-test-volume")
+        show_fs_size = "docker run -t -v {}:/bar:ceph debian:latest df -h --output=size /bar".format(self.IMAGE)
+        out = run("rbd create --size=1G {}".format(self.IMAGE))
         out = run(show_fs_size)
         self.assertIn("976M", out)
-        out = run("rbd resize --size=2G docker-test-volume")
+        out = run("rbd resize --size=2G {}".format(self.IMAGE))
         out = run(show_fs_size)
         self.assertIn("2.0G", out)
-        out = run("rbd rm docker-test-volume")
 
     def test_docker_ceph_luks_volume(self):
         # create encripted luks volume
-        out = run("rbd create --size=1G docker-test-volume")
-        dev = run("rbd map docker-test-volume 2>/dev/null").strip()
-        out = run("echo 'docker-test-volume' | cryptsetup luksFormat -q %s" % dev )
-        out = run("rbd unmap docker-test-volume")
-
-        create_file = "docker run -t -v docker-test-volume:/foo:ceph debian:latest /bin/bash -c \"echo 'dog' > /foo/cat\""
+        out = run("rbd create --size=1G {}".format(self.IMAGE))
+        dev = run("rbd map {} 2>/dev/null".format(self.IMAGE)).strip()
+        out = run("echo '{}' | cryptsetup luksFormat -q {}".format(self.IMAGE, dev))
+        out = run("rbd unmap {}".format(self.IMAGE))
+        create_file = "docker run -t -v {}:/foo:ceph debian:latest /bin/bash -c \"echo 'dog' > /foo/cat\"".format(self.IMAGE)
         out = run(create_file)
-        read_file = "docker run -t -v docker-test-volume:/foo:ceph debian:latest cat /foo/cat"
+        read_file = "docker run -t -v {}:/foo:ceph debian:latest cat /foo/cat".format(self.IMAGE)
         out = run(read_file)
         self.assertIn("dog", out)
-
         out = run("rbd showmapped")
         self.assertNotIn("docker-test-volume", out)
 
-        out = run("rbd rm docker-test-volume")
+    def test_docker_ceph_luks_with_wrong_key(self):
+        # create encripted luks volume
+        out = run("rbd create --size=1G {}".format(self.IMAGE))
+        dev = run("rbd map {} 2>/dev/null".format(self.IMAGE)).strip()
+        out = run("echo '{}' | cryptsetup luksFormat -q {}".format('wrong_key', dev))
+        out = run("rbd unmap {}".format(self.IMAGE))
+        # docker expects the volume to be encrypted using its name as the key.
+        self.assertRaises(subprocess.CalledProcessError, run, "docker run -t -v {}:/foo:ceph debian:latest echo hello".format(self.IMAGE))
+
+class DockerCephPoolsTests(DockerCephTests):
+    IMAGE="testpool/docker-test-volume"
+
 
 def run(cmd):
     """
